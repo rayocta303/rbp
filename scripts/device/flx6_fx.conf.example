@@ -1,0 +1,35 @@
+# /run/rblive4/flx6_fx.conf & /opt/rblive4/flx6_fx.conf
+# DDJ-FLX6 Sound Color FX & Beat FX Configuration for XDJ-RX3 Standalone
+
+# Sound Color FX for SHIFT + HEADPHONE CUE 1-4
+# Options: filter, dubecho, noise, space, crush, sweep
+cfx_slot1=filter
+cfx_slot2=dubecho
+cfx_slot3=noise
+cfx_slot4=space
+
+# Beat FX for 6 physical slots on DDJ-FLX6
+# FX Rack 1 (Deck 1): Slots 1..3 (Ch 5, Notes 71..73, CCs 2, 4, 6)
+# FX Rack 2 (Deck 2): Slots 4..6 (Ch 6, Notes 71..73, CCs 2, 4, 6)
+#
+# Types:
+#  0: DELAY       1: ECHO        2: PING PONG   3: SPIRAL
+#  4: HELIX       5: REVERB      6: FLANGER     7: PHASER
+#  8: FILTER      9: TRANS      10: ROLL       11: SLIP ROLL
+# 12: PITCH      13: VINYL BRAKE
+#
+# Channels:
+#  0: Deck 1      1: Deck 2      5: Master
+
+bfx_slot1_type=0
+bfx_slot1_ch=0
+bfx_slot2_type=1
+bfx_slot2_ch=0
+bfx_slot3_type=3
+bfx_slot3_ch=0
+bfx_slot4_type=5
+bfx_slot4_ch=1
+bfx_slot5_type=6
+bfx_slot5_ch=1
+bfx_slot6_type=10
+bfx_slot6_ch=1

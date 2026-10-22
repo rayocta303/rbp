@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <math.h>
@@ -174,6 +175,14 @@ static const char VNC_HTTP_CSS[] =
     "img{display:block;width:100%;height:100%;object-fit:contain;border:0}"
     "p.note{color:#9aa0a6;font-size:13px}"
     "b.bad{color:#ef9a9a}b.good{color:#a5d6a7}"
+    "select{font:inherit;font-size:13px;background:#1e2126;color:#e8e6e3;border:1px solid #3a3f45;"
+    "border-radius:6px;padding:6px 10px;cursor:pointer}"
+    "select:focus{outline:none;border-color:#4caf50}"
+    ".fx-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:0 0 20px}"
+    ".fx-card{background:#181b20;border:1px solid #2d3239;border-radius:8px;padding:12px}"
+    ".fx-card h3{margin:0 0 8px;font-size:14px;color:#a5d6a7;display:flex;justify-content:space-between;align-items:center}"
+    ".fx-row{display:flex;align-items:center;justify-content:space-between;margin:0 0 6px;gap:8px}"
+    ".fx-label{font-size:12px;color:#9aa0a6}"
     /* THE PICTURE'S BOX IS A PLAIN DIV, AND THAT IS THE POINT. See the note above this
      * table. Sizing the <img> itself from its own decoded frame -- even with a definite
      * `aspect-ratio` -- leaves one way for the box to move: a browser that drops
@@ -194,6 +203,97 @@ static const char VNC_HTTP_CSS[] =
     "body.only .shot{flex:none;width:min(1280px,100vw,160vh);"
     "height:min(800px,62.5vw,100vh);aspect-ratio:auto;border:0;border-radius:0;"
     "cursor:pointer}";
+
+struct flx6_fx_config {
+    char cfx[4][16];
+    int bfx_type[6];
+    int bfx_ch[6];
+};
+
+static const char *const bfx_names[14] = {
+    "DELAY", "ECHO", "PING PONG", "SPIRAL", "HELIX", "REVERB", "FLANGER",
+    "PHASER", "FILTER", "TRANS", "ROLL", "SLIP ROLL", "PITCH", "VINYL BRAKE"
+};
+
+static const char *const cfx_options[6] = {
+    "filter", "dubecho", "noise", "space", "crush", "sweep"
+};
+
+static const char *const cfx_labels[6] = {
+    "Filter", "Dub Echo", "Noise", "Space", "Crush", "Sweep"
+};
+
+static void flx6_config_defaults(struct flx6_fx_config *cfg)
+{
+    strcpy(cfg->cfx[0], "filter");
+    strcpy(cfg->cfx[1], "dubecho");
+    strcpy(cfg->cfx[2], "noise");
+    strcpy(cfg->cfx[3], "space");
+
+    cfg->bfx_type[0] = 0;  cfg->bfx_ch[0] = 0;
+    cfg->bfx_type[1] = 1;  cfg->bfx_ch[1] = 0;
+    cfg->bfx_type[2] = 3;  cfg->bfx_ch[2] = 0;
+    cfg->bfx_type[3] = 5;  cfg->bfx_ch[3] = 1;
+    cfg->bfx_type[4] = 6;  cfg->bfx_ch[4] = 1;
+    cfg->bfx_type[5] = 10; cfg->bfx_ch[5] = 1;
+}
+
+static void flx6_config_load(struct flx6_fx_config *cfg)
+{
+    flx6_config_defaults(cfg);
+    FILE *f = fopen("/run/rblive4/flx6_fx.conf", "r");
+    if (!f) f = fopen("/opt/rblive4/flx6_fx.conf", "r");
+    if (!f) return;
+
+    char line[128];
+    while (fgets(line, sizeof line, f)) {
+        char *p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == '#' || *p == '\0' || *p == '\r' || *p == '\n') continue;
+        char *eq = strchr(p, '=');
+        if (!eq) continue;
+        *eq = '\0';
+        char *val = eq + 1;
+        char *k_end = eq - 1;
+        while (k_end > p && (*k_end == ' ' || *k_end == '\t')) *k_end-- = '\0';
+        while (*val == ' ' || *val == '\t') val++;
+        char *v_end = val + strlen(val) - 1;
+        while (v_end >= val && (*v_end == '\r' || *v_end == '\n' || *v_end == ' ' || *v_end == '\t'))
+            *v_end-- = '\0';
+
+        if (!strncmp(p, "cfx_slot", 8)) {
+            int s = p[8] - '1';
+            if (s >= 0 && s < 4) {
+                snprintf(cfg->cfx[s], sizeof cfg->cfx[s], "%s", val);
+            }
+        } else if (!strncmp(p, "bfx_slot", 8)) {
+            int s = p[8] - '1';
+            if (s >= 0 && s < 6) {
+                if (strstr(p, "_type")) cfg->bfx_type[s] = atoi(val);
+                else if (strstr(p, "_ch")) cfg->bfx_ch[s] = atoi(val);
+            }
+        }
+    }
+    fclose(f);
+}
+
+static void flx6_config_save(const struct flx6_fx_config *cfg)
+{
+    const char *paths[] = { "/run/rblive4/flx6_fx.conf", "/opt/rblive4/flx6_fx.conf" };
+    for (int i = 0; i < 2; i++) {
+        FILE *f = fopen(paths[i], "w");
+        if (f) {
+            fprintf(f, "# DDJ-FLX6 FX Configuration\n");
+            for (int s = 0; s < 4; s++)
+                fprintf(f, "cfx_slot%d=%s\n", s + 1, cfg->cfx[s]);
+            for (int s = 0; s < 6; s++) {
+                fprintf(f, "bfx_slot%d_type=%d\n", s + 1, cfg->bfx_type[s]);
+                fprintf(f, "bfx_slot%d_ch=%d\n", s + 1, cfg->bfx_ch[s]);
+            }
+            fclose(f);
+        }
+    }
+}
 
 static void page_html(struct vnc_http *h, struct sbuf *b)
 {
@@ -357,6 +457,58 @@ static void page_html(struct vnc_http *h, struct sbuf *b)
         sb_adds(b, "<p class=\"note\">Adjust jogwheel sensitivity smoothly with the slider or quick preset buttons without restarting.</p>");
     }
 
+    sb_adds(b, "<h1 style=\"font-size:16px\">DDJ-FLX6 Sound Color FX (SHIFT + CUE 1-4)</h1>");
+    {
+        struct flx6_fx_config cfg;
+        flx6_config_load(&cfg);
+
+        sb_adds(b, "<p class=\"lead\">Pilih jenis Sound Color FX untuk setiap tombol Headphone Cue saat menahan <b>SHIFT</b>.</p>");
+        sb_adds(b, "<div class=\"fx-grid\">");
+        for (int s = 0; s < 4; s++) {
+            sb_addf(b, "<div class=\"fx-card\">"
+                       "<h3>Slot %d <span class=\"fx-label\">SHIFT + CUE %d</span></h3>"
+                       "<form method=\"get\" action=\"/flx6_cfx\" style=\"margin:0\">"
+                       "<input type=\"hidden\" name=\"slot\" value=\"%d\">"
+                       "<div class=\"fx-row\">"
+                       "<select name=\"fx\" onchange=\"this.form.submit()\" style=\"flex:1\">",
+                    s + 1, s + 1, s + 1);
+            for (int opt = 0; opt < 6; opt++) {
+                int sel = !strcasecmp(cfg.cfx[s], cfx_options[opt]);
+                sb_addf(b, "<option value=\"%s\"%s>%s</option>",
+                        cfx_options[opt], sel ? " selected" : "", cfx_labels[opt]);
+            }
+            sb_adds(b, "</select></div></form></div>");
+        }
+        sb_adds(b, "</div>");
+
+        sb_adds(b, "<h1 style=\"font-size:16px\">DDJ-FLX6 Beat FX Rack Slots (FX1 & FX2)</h1>");
+        sb_adds(b, "<p class=\"lead\">Konfigurasi 6 slot efek fisik pada FX Rack 1 (Deck 1) & FX Rack 2 (Deck 2).</p>");
+        sb_adds(b, "<div class=\"fx-grid\">");
+        for (int s = 0; s < 6; s++) {
+            int rack = (s < 3) ? 1 : 2;
+            int rslot = (s % 3) + 1;
+            sb_addf(b, "<div class=\"fx-card\">"
+                       "<h3>FX%d Slot %d <span class=\"fx-label\">Note %d</span></h3>"
+                       "<form method=\"get\" action=\"/flx6_bfx\" style=\"margin:0\">"
+                       "<input type=\"hidden\" name=\"slot\" value=\"%d\">"
+                       "<div class=\"fx-row\"><span class=\"fx-label\">Effect</span>"
+                       "<select name=\"type\" style=\"flex:1\" onchange=\"this.form.submit()\">",
+                    rack, rslot, 71 + (s % 3), s + 1);
+            for (int t = 0; t < 14; t++) {
+                sb_addf(b, "<option value=\"%d\"%s>%s</option>",
+                        t, (cfg.bfx_type[s] == t) ? " selected" : "", bfx_names[t]);
+            }
+            sb_adds(b, "</select></div>");
+            sb_adds(b, "<div class=\"fx-row\"><span class=\"fx-label\">Channel</span>"
+                       "<select name=\"ch\" style=\"flex:1\" onchange=\"this.form.submit()\">");
+            sb_addf(b, "<option value=\"0\"%s>Deck 1</option>", (cfg.bfx_ch[s] == 0) ? " selected" : "");
+            sb_addf(b, "<option value=\"1\"%s>Deck 2</option>", (cfg.bfx_ch[s] == 1) ? " selected" : "");
+            sb_addf(b, "<option value=\"5\"%s>Master</option>", (cfg.bfx_ch[s] == 5) ? " selected" : "");
+            sb_adds(b, "</select></div></form></div>");
+        }
+        sb_adds(b, "</div>");
+    }
+
     sb_adds(b, "<h1 style=\"font-size:16px\">Preview</h1>");
     if (!share)
         sb_adds(b, "<p class=\"note\">Nothing to show: the preview is the hardware "
@@ -485,6 +637,28 @@ static size_t query_set(const char *target, char *word, size_t cap)
     return n;
 }
 
+static size_t query_param(const char *target, const char *key, char *out, size_t cap)
+{
+    const char *q = strchr(target, '?');
+    if (!q) return 0;
+    q++;
+    size_t klen = strlen(key);
+    while (*q) {
+        if (!strncmp(q, key, klen) && q[klen] == '=') {
+            const char *val = q + klen + 1;
+            size_t n = strcspn(val, "& \r\n");
+            if (n >= cap) n = cap - 1;
+            memcpy(out, val, n);
+            out[n] = '\0';
+            return n;
+        }
+        q = strchr(q, '&');
+        if (!q) break;
+        q++;
+    }
+    return 0;
+}
+
 static void route_get(struct vnc_http *h, struct hconn *c, const char *target)
 {
     if (!strncmp(target, "/mode", 5) && (target[5] == '\0' || target[5] == '?')) {
@@ -570,6 +744,45 @@ static void route_get(struct vnc_http *h, struct hconn *c, const char *target)
                     fclose(f);
                     vlog("http: jog speed multiplier set to %.2f", mult);
                 }
+            }
+        }
+        reply(c, 303, "See Other", "text/plain; charset=utf-8", "", 0,
+              "Location: /\r\n");
+        return;
+    }
+
+    if (!strncmp(target, "/flx6_cfx", 9) && (target[9] == '\0' || target[9] == '?')) {
+        char slot_str[16], fx_str[32];
+        if (query_param(target, "slot", slot_str, sizeof slot_str) &&
+            query_param(target, "fx", fx_str, sizeof fx_str)) {
+            int slot = atoi(slot_str) - 1;
+            if (slot >= 0 && slot < 4) {
+                struct flx6_fx_config cfg;
+                flx6_config_load(&cfg);
+                snprintf(cfg.cfx[slot], sizeof cfg.cfx[slot], "%s", fx_str);
+                flx6_config_save(&cfg);
+                vlog("http: FLX6 Color FX Slot %d updated to %s", slot + 1, fx_str);
+            }
+        }
+        reply(c, 303, "See Other", "text/plain; charset=utf-8", "", 0,
+              "Location: /\r\n");
+        return;
+    }
+
+    if (!strncmp(target, "/flx6_bfx", 9) && (target[9] == '\0' || target[9] == '?')) {
+        char slot_str[16], type_str[16], ch_str[16];
+        if (query_param(target, "slot", slot_str, sizeof slot_str)) {
+            int slot = atoi(slot_str) - 1;
+            if (slot >= 0 && slot < 6) {
+                struct flx6_fx_config cfg;
+                flx6_config_load(&cfg);
+                if (query_param(target, "type", type_str, sizeof type_str))
+                    cfg.bfx_type[slot] = atoi(type_str);
+                if (query_param(target, "ch", ch_str, sizeof ch_str))
+                    cfg.bfx_ch[slot] = atoi(ch_str);
+                flx6_config_save(&cfg);
+                vlog("http: FLX6 Beat FX Slot %d updated: type=%d, ch=%d",
+                     slot + 1, cfg.bfx_type[slot], cfg.bfx_ch[slot]);
             }
         }
         reply(c, 303, "See Other", "text/plain; charset=utf-8", "", 0,

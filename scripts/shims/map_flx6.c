@@ -6,25 +6,34 @@
  * official publication: "DDJ-FLX6 List of MIDI messages" (Ver 1.0).
  *
  * Architecture:
- * - 4 Decks (MIDI channels 1..4 -> 0-based rch 0..3):
- *   Decks 1 & 3 route to Left Player (sch = 1).
- *   Decks 2 & 4 route to Right Player (sch = 2).
- * - 4-Channel Mixer Strip (Ch 1..4):
+ * - 2 Decks (MIDI channels 1 & 2 -> 0-based rch 0 & 1):
+ *   Decks 1 & 2 route to Left & Right Players (sch = 1 & 2).
+ *   Decks 3 & 4 are disabled for clean 2-deck standalone operation on XDJ-RX3.
+ * - 2-Channel Mixer Strip (Ch 1 & 2):
  *   Trim (CC 4), EQ Hi (CC 7), EQ Mid (CC 11), EQ Low (CC 15), Fader (CC 19),
  *   Headphone Cue (Note 84).
- *   Sound Color FX / Filter (CC 23, 24, 25, 26 on Ch 7).
+ *   Sound Color FX / Filter (CC 23, 24 on Ch 7).
+ * - SHIFT + HEADPHONE CUE 1-4:
+ *   Instantly selects Sound Color FX (Filter, Dub Echo, Noise, Space, Crush, Sweep).
  * - Dedicated Browse / Navigation on Ch 7:
  *   Browse turn (CC 64) / push (Note 65), Shift-push Source (Note 66),
  *   BACK button (Note 101 -> K_BACK), VIEW button (Note 122 -> K_BROWSE),
- *   Dedicated Load 1..4 buttons (Notes 70..73).
+ *   SHIFT + VIEW button (Note 104 -> K_SOURCE),
+ *   Dedicated Load 1 & 2 buttons (Notes 70 & 71).
  * - 8 Performance Pads per deck across 4 modes (Hot Cue, Beat Loop, Slip Loop, Beat Jump).
- * - Relative Jog Wheels (0x40-centred) across all 4 decks.
- * - 14-bit Tempo Sliders across all 4 decks.
- * - Beat FX & Merge FX controls.
+ * - Relative Jog Wheels (0x40-centred) for Decks 1 & 2.
+ * - 14-bit Tempo Sliders for Decks 1 & 2.
+ * - Beat FX & Merge FX controls (Slots 1-3 on FX1 and FX2).
  * - Channel Level Meters (CC 2, banded 0x26..0x7F).
+ * - Dynamic hot reload of Color FX and Beat FX slot configurations from /run/rblive4/flx6_fx.conf.
  */
 #define _GNU_SOURCE
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+#include <sys/stat.h>
 #include <sound/asequencer.h>
 
 #include "shimutil.h"
@@ -40,8 +49,8 @@
 /* ---- MIDI receive channels, 0-based (List channel minus 1) ---- */
 #define CH_DECK1  0   /* List ch 1  -- deck 1 */
 #define CH_DECK2  1   /* List ch 2  -- deck 2 */
-#define CH_DECK3  2   /* List ch 3  -- deck 3 */
-#define CH_DECK4  3   /* List ch 4  -- deck 4 */
+#define CH_DECK3  2   /* List ch 3  -- deck 3 (disabled) */
+#define CH_DECK4  3   /* List ch 4  -- deck 4 (disabled) */
 #define CH_FX1    4   /* List ch 5  -- Beat FX 1 */
 #define CH_FX2    5   /* List ch 6  -- Beat FX 2 */
 #define CH_MIX    6   /* List ch 7  -- mixer knobs, browse, master */
@@ -51,12 +60,12 @@
 #define CH_PADS1S 8   /* List ch 9  -- deck 1 pads +SHIFT */
 #define CH_PADS2  9   /* List ch 10 -- deck 2 pads */
 #define CH_PADS2S 10  /* List ch 11 -- deck 2 pads +SHIFT */
-#define CH_PADS3  11  /* List ch 12 -- deck 3 pads */
-#define CH_PADS3S 12  /* List ch 13 -- deck 3 pads +SHIFT */
-#define CH_PADS4  13  /* List ch 14 -- deck 4 pads */
-#define CH_PADS4S 14  /* List ch 15 -- deck 4 pads +SHIFT */
+#define CH_PADS3  11  /* List ch 12 -- deck 3 pads (disabled) */
+#define CH_PADS3S 12  /* List ch 13 -- deck 3 pads +SHIFT (disabled) */
+#define CH_PADS4  13  /* List ch 14 -- deck 4 pads (disabled) */
+#define CH_PADS4S 14  /* List ch 15 -- deck 4 pads +SHIFT (disabled) */
 
-/* ---- Deck button notes (channels 0..3) ---- */
+/* ---- Deck button notes (channels 0..1) ---- */
 #define N_PLAY        11   /* PLAY/PAUSE (+SHIFT 71) */
 #define N_CUE         12   /* CUE        (+SHIFT 72) */
 #define N_SHIFT       63   /* SHIFT */
@@ -76,7 +85,8 @@
 #define N_SYNC        88   /* BEAT SYNC  (+SHIFT 93) */
 #define N_MASTER      92   /* MASTER */
 #define N_TEMPO_RANGE 96   /* +SHIFT MASTER -> Tempo Range (+-6/10/16/WIDE) */
-#define N_CH_CUE      84   /* Channel CUE (PFL) (+SHIFT 104) */
+#define N_CH_CUE      84   /* Channel CUE (PFL) */
+#define N_CH_CUE_SHIFT 104 /* +SHIFT Channel CUE 1-4 -> Color FX */
 
 /* Pad mode buttons (Positional mapping for RX3) */
 #define N_MODE_HOT    27   /* HOT CUE */
@@ -85,7 +95,7 @@
 #define N_MODE_SMPL   34   /* SAMPLER -> BEAT JUMP */
 
 /* Deck select toggle notes */
-#define N_DECK_TOGGLE 114  /* Deck 3/4 button press */
+#define N_DECK_TOGGLE 114  /* Deck 3/4 button press (ignored on RX3) */
 #define N_DECK_STATE  60   /* Deck state feedback */
 
 /* ---- Mixer & Browse buttons on CH_MIX (ch 6) ---- */
@@ -93,10 +103,9 @@
 #define N_BROWSE_PUSH_SHIFT 66  /* SHIFT + browse knob push -> SOURCE screen */
 #define N_BACK              101 /* Dedicated BACK button */
 #define N_VIEW              122 /* Dedicated VIEW button -> BROWSE screen */
+#define N_VIEW_SHIFT        104 /* Dedicated SHIFT + VIEW button -> SOURCE screen */
 #define N_LOAD1             70  /* LOAD deck 1 */
 #define N_LOAD2             71  /* LOAD deck 2 */
-#define N_LOAD3             72  /* LOAD deck 3 */
-#define N_LOAD4             73  /* LOAD deck 4 */
 #define N_LOAD1_SHIFT       88  /* SHIFT + LOAD 1 -> TRACK FILTER */
 #define N_LOAD2_SHIFT       89  /* SHIFT + LOAD 2 -> SHORTCUT */
 #define N_MASTER_CUE        99  /* MASTER CUE */
@@ -132,8 +141,6 @@
 #define CC_HP_LEVEL         13
 #define CC_CFX1             23  /* Filter / Color FX CH1 */
 #define CC_CFX2             24  /* Filter / Color FX CH2 */
-#define CC_CFX3             25  /* Filter / Color FX CH3 */
-#define CC_CFX4             26  /* Filter / Color FX CH4 */
 #define CC_BROWSE           64  /* Browse relative 0x01/0x7F */
 #define CC_BROWSE_SHIFT     100
 #define CC_FX_DEPTH         2   /* Beat FX Level/Depth (ch 4 & 5) */
@@ -163,19 +170,163 @@ struct jog_ctrl {
      int started;
 };
 
-static struct jog_ctrl jog_state[4];
+static struct jog_ctrl jog_state[2];
 
 struct flx6_pitch_ctrl {
      int have_hi;
      int pos;
 };
 
-static struct flx6_pitch_ctrl flx6_pitch_state[4] = {
-     { 0, 0x2000 },
-     { 0, 0x2000 },
+static struct flx6_pitch_ctrl flx6_pitch_state[2] = {
      { 0, 0x2000 },
      { 0, 0x2000 },
 };
+
+/* Sound Color FX slots (assigned to SHIFT + HEADPHONE CUE 1-4) */
+static int flx6_cfx_slots[4] = {
+     K_FILTER,   /* Slot 1: Filter */
+     K_DUBECHO,  /* Slot 2: Dub Echo */
+     K_NOISE,    /* Slot 3: Noise */
+     K_SPACE     /* Slot 4: Space */
+};
+static int flx6_active_cfx_slot = 0;
+
+struct flx6_bfx_slot {
+     int fx_type;    /* BFX switch position (0..13) */
+     int channel;    /* 0=Deck 1, 1=Deck 2, BFX_CH_MASTER=Master */
+     int depth;      /* 0..127 */
+     int on;         /* 0=off, 1=on */
+};
+
+/* 6 slots on DDJ-FLX6:
+ * Slots 0..2: FX Rack 1 (ch 4, 0x94), Notes 71..73, CCs 2, 4, 6
+ * Slots 3..5: FX Rack 2 (ch 5, 0x95), Notes 71..73, CCs 2, 4, 6 */
+static struct flx6_bfx_slot flx6_slots[6] = {
+     { 0, 0, 64, 0 },  /* FX1-1: Delay,   Deck 1 (Note 71, CC 2) */
+     { 1, 0, 64, 0 },  /* FX1-2: Echo,    Deck 1 (Note 72, CC 4) */
+     { 3, 0, 64, 0 },  /* FX1-3: Spiral,  Deck 1 (Note 73, CC 6) */
+     { 4, 1, 64, 0 },  /* FX2-1: Reverb,  Deck 2 (Note 71, CC 2) */
+     { 6, 1, 64, 0 },  /* FX2-2: Flanger, Deck 2 (Note 72, CC 4) */
+     { 9, 1, 64, 0 },  /* FX2-3: Roll,    Deck 2 (Note 73, CC 6) */
+};
+static int flx6_active_slot = 0;
+static int bfx_led_blink = 0;
+static unsigned long long bfx_led_last_ms = 0;
+static int bfx_led_last_sent[6] = { -1, -1, -1, -1, -1, -1 };
+static int last_seen_rbp_fx_pos = -1;
+
+static const char *flx6_cfx_name(int key)
+{
+     switch (key) {
+     case K_FILTER:  return "Filter";
+     case K_DUBECHO: return "Dub Echo";
+     case K_NOISE:   return "Noise";
+     case K_SPACE:   return "Space";
+     case K_CRUSH:   return "Crush";
+     case K_SWEEP:   return "Sweep";
+     default:        return "Unknown";
+     }
+}
+
+static int flx6_cfx_from_name(const char *name)
+{
+     if (!name) return K_FILTER;
+     if (!strcasecmp(name, "filter"))  return K_FILTER;
+     if (!strcasecmp(name, "dubecho") || !strcasecmp(name, "dub echo")) return K_DUBECHO;
+     if (!strcasecmp(name, "noise"))   return K_NOISE;
+     if (!strcasecmp(name, "space"))   return K_SPACE;
+     if (!strcasecmp(name, "crush"))   return K_CRUSH;
+     if (!strcasecmp(name, "sweep"))   return K_SWEEP;
+     return K_FILTER;
+}
+
+static void flx6_select_cfx_slot(int slot)
+{
+     if (slot < 0 || slot >= 4) return;
+     int key = flx6_cfx_slots[slot];
+     if (key <= 0) return;
+
+     send_rx_key(key, OP_PRESS, 1, 0);
+     send_rx_key(key, OP_RELEASE, 1, 0);
+     send_rx_key(key, OP_PRESS, 2, 0);
+     send_rx_key(key, OP_RELEASE, 2, 0);
+     flx6_active_cfx_slot = slot;
+
+     klog("knobshim2: FLX6 SHIFT+CUE%d -> Color FX Slot %d: %s (0x%04x)\n",
+          slot + 1, slot + 1, flx6_cfx_name(key), key);
+}
+
+static unsigned long long flx6_cfg_last_check = 0;
+static time_t flx6_cfg_last_mtime = 0;
+
+static void flx6_load_fx_config(void)
+{
+     const char *path = "/run/rblive4/flx6_fx.conf";
+     FILE *f = fopen(path, "r");
+     if (!f) {
+          path = "/opt/rblive4/flx6_fx.conf";
+          f = fopen(path, "r");
+     }
+     if (!f) return;
+
+     char line[128];
+     while (fgets(line, sizeof line, f)) {
+          char *p = line;
+          while (*p == ' ' || *p == '\t') p++;
+          if (*p == '#' || *p == '\0' || *p == '\r' || *p == '\n') continue;
+
+          char *eq = strchr(p, '=');
+          if (!eq) continue;
+          *eq = '\0';
+          char *val = eq + 1;
+          char *k_end = eq - 1;
+          while (k_end > p && (*k_end == ' ' || *k_end == '\t')) *k_end-- = '\0';
+          while (*val == ' ' || *val == '\t') val++;
+          char *v_end = val + strlen(val) - 1;
+          while (v_end >= val && (*v_end == '\r' || *v_end == '\n' || *v_end == ' ' || *v_end == '\t'))
+               *v_end-- = '\0';
+
+          if (!strncmp(p, "cfx_slot", 8)) {
+               int s = p[8] - '1';
+               if (s >= 0 && s < 4) {
+                    flx6_cfx_slots[s] = flx6_cfx_from_name(val);
+               }
+          } else if (!strncmp(p, "bfx_slot", 8)) {
+               int s = p[8] - '1';
+               if (s >= 0 && s < 6) {
+                    if (strstr(p, "_type")) {
+                         int t = atoi(val);
+                         if (t >= 0 && t < 14) flx6_slots[s].fx_type = t;
+                    } else if (strstr(p, "_ch")) {
+                         int c = atoi(val);
+                         if (c == 0 || c == 1 || c == BFX_CH_MASTER)
+                              flx6_slots[s].channel = c;
+                    }
+               }
+          }
+     }
+     fclose(f);
+     klog("knobshim2: FLX6 FX configuration loaded from %s\n", path);
+}
+
+static void flx6_check_fx_config(void)
+{
+     unsigned long long now = shim_now_ms();
+     if (now - flx6_cfg_last_check < 500) return;
+     flx6_cfg_last_check = now;
+
+     struct stat st;
+     const char *path = "/run/rblive4/flx6_fx.conf";
+     if (stat(path, &st) != 0) {
+          path = "/opt/rblive4/flx6_fx.conf";
+          if (stat(path, &st) != 0) return;
+     }
+
+     if (st.st_mtime != flx6_cfg_last_mtime) {
+          flx6_cfg_last_mtime = st.st_mtime;
+          flx6_load_fx_config();
+     }
+}
 
 static void flx6_log_only(int ch, int note)
 {
@@ -215,11 +366,11 @@ static void flx6_mastervol(int cc, int val)
      g_mirror_gain = flx6_mastervol_gain(pos);
 }
 
-/* 14-bit pitch fader across all 4 decks */
+/* 14-bit pitch fader across 2 decks */
 static void flx6_pitch(int ch, int cc, int val)
 {
-     if (ch < 0 || ch > 3) return;
-     int idx = (ch == CH_DECK2 || ch == CH_DECK4) ? 1 : 0;
+     if (ch < 0 || ch > 1) return;
+     int idx = ch;
      int sch = idx + 1;
      struct flx6_pitch_ctrl *s = &flx6_pitch_state[ch];
 
@@ -271,12 +422,13 @@ static float flx6_get_jog_multiplier(void)
      return cached_mult;
 }
 
-static float jog_accum[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+static float jog_accum[2] = {0.0f, 0.0f};
 
 /* Relative jog handler */
 static void flx6_jog(int ch, int val)
 {
-     int d_idx = (ch >= 0 && ch < 4) ? ch : 0;
+     if (ch < 0 || ch > 1) return;
+     int d_idx = ch;
      struct jog_ctrl *s = &jog_state[d_idx];
      int d = val - 0x40;
      if (d == 0) return;
@@ -318,7 +470,7 @@ static void flx6_jog(int ch, int val)
 static void flx6_jog_idle(void)
 {
      unsigned long long t = shim_now_ms();
-     for (int i = 0; i < 4; i++) {
+     for (int i = 0; i < 2; i++) {
           struct jog_ctrl *s = &jog_state[i];
           if (!s->started || !s->moving)
                continue;
@@ -392,10 +544,10 @@ static void flx6_build(void)
      tempo_verbose = env_on("TEMPO_VERBOSE", 0);
      tempo_rev = env_on("TEMPO_REV", 0);
 
-     /* Initialize jog state */
-     for (int d = 0; d < 4; d++) {
+     /* Initialize jog state (only Decks 1 & 2) */
+     for (int d = 0; d < 2; d++) {
           jog_state[d].rch = d;
-          jog_state[d].sch = (d % 2) + 1;
+          jog_state[d].sch = d + 1;
           jog_state[d].vpos = 0;
           jog_state[d].speed = 0.0f;
           jog_state[d].last_ms = 0;
@@ -403,10 +555,10 @@ static void flx6_build(void)
           jog_state[d].started = 0;
      }
 
-     /* ---- 4 Decks (ch 0..3) ---- */
-     for (int d = 0; d < 4; d++) {
+     /* ---- 2 Decks (ch 0..1: Deck 1 & Deck 2) ---- */
+     for (int d = 0; d < 2; d++) {
           int rch = d;
-          int sch = (d % 2) + 1;
+          int sch = d + 1;
 
           /* Transport & Loop */
           add_note(rch, N_PLAY, K_PLAY, sch);
@@ -442,10 +594,10 @@ static void flx6_build(void)
           add_abs(rch, CC_FADER, K_FADER, sch);
      }
 
-     /* ---- 8 Performance Pads per deck (4 decks) ---- */
-     for (int d = 0; d < 4; d++) {
-          int rch = CH_PADS1 + 2 * d;
-          int sch = (d % 2) + 1;
+     /* ---- 8 Performance Pads per deck (Decks 1 & 2) ---- */
+     for (int d = 0; d < 2; d++) {
+          int rch = (d == 0) ? CH_PADS1 : CH_PADS2;
+          int sch = d + 1;
           for (int p = 0; p < 8; p++) {
                add_note(rch,  0 + p, K_PAD1 + p, sch);  /* HOT CUE */
                add_note(rch, 16 + p, K_PAD1 + p, sch);  /* PAD FX 1 -> AUTO BEAT LOOP */
@@ -455,11 +607,9 @@ static void flx6_build(void)
      }
 
      /* ---- Mixer / Browse / Global controls on CH_MIX (ch 6) ---- */
-     /* 4-Channel Sound Color FX (Filter) */
+     /* 2-Channel Sound Color FX (Filter) */
      add_abs(CH_MIX, CC_CFX1, K_COLOR, 1);
      add_abs(CH_MIX, CC_CFX2, K_COLOR, 2);
-     add_abs(CH_MIX, CC_CFX3, K_COLOR, 1);
-     add_abs(CH_MIX, CC_CFX4, K_COLOR, 2);
 
      /* Crossfader & Headphone Cue */
      add_abs(CH_MIX, CC_XFADER, K_XFADER, CH_GLOBAL);
@@ -473,12 +623,11 @@ static void flx6_build(void)
      /* Dedicated navigation buttons on DDJ-FLX6 */
      add_note(CH_MIX, N_BACK, K_BACK, CH_GLOBAL);
      add_note(CH_MIX, N_VIEW, K_BROWSE, CH_GLOBAL);
+     add_note(CH_MIX, N_VIEW_SHIFT, K_SOURCE, CH_GLOBAL);
 
-     /* Dedicated Load buttons 1..4 */
+     /* Dedicated Load buttons 1 & 2 */
      add_note(CH_MIX, N_LOAD1, K_LOAD, 1);
      add_note(CH_MIX, N_LOAD2, K_LOAD, 2);
-     add_note(CH_MIX, N_LOAD3, K_LOAD, 1);
-     add_note(CH_MIX, N_LOAD4, K_LOAD, 2);
 
      /* Shift + Load shortcuts */
      add_note_repeat(CH_MIX, N_LOAD1_SHIFT, K_TRACKFILTER, CH_GLOBAL);
@@ -508,30 +657,6 @@ static int flx6_beat_to_cc100(int numer, int denom)
      if (numer >= 32) return 0x0A;              /* 32 */
      return 0x05;
 }
-
-struct flx6_bfx_slot {
-     int fx_type;    /* BFX switch position (0..13) */
-     int channel;    /* 0=Deck 1, 1=Deck 2, BFX_CH_MASTER=Master */
-     int depth;      /* 0..127 */
-     int on;         /* 0=off, 1=on */
-};
-
-/* 6 slots on DDJ-FLX6:
- * Slots 0..2: FX Rack 1 (ch 4, 0x94), Notes 71..73, CCs 2, 4, 6
- * Slots 3..5: FX Rack 2 (ch 5, 0x95), Notes 71..73, CCs 2, 4, 6 */
-static struct flx6_bfx_slot flx6_slots[6] = {
-     { 0, 0, 64, 0 },  /* FX1-1: Delay,   Deck 1 (Note 71, CC 2) */
-     { 1, 0, 64, 0 },  /* FX1-2: Echo,    Deck 1 (Note 72, CC 4) */
-     { 3, 0, 64, 0 },  /* FX1-3: Spiral,  Deck 1 (Note 73, CC 6) */
-     { 4, 1, 64, 0 },  /* FX2-1: Reverb,  Deck 2 (Note 71, CC 2) */
-     { 6, 1, 64, 0 },  /* FX2-2: Flanger, Deck 2 (Note 72, CC 4) */
-     { 9, 1, 64, 0 },  /* FX2-3: Roll,    Deck 2 (Note 73, CC 6) */
-};
-static int flx6_active_slot = 0;
-static int bfx_led_blink = 0;
-static unsigned long long bfx_led_last_ms = 0;
-static int bfx_led_last_sent[6] = { -1, -1, -1, -1, -1, -1 };
-static int last_seen_rbp_fx_pos = -1;
 
 static void flx6_update_bfx_led(void)
 {
@@ -651,6 +776,8 @@ static void flx6_startup(void)
      send_rx_key_f(K_MASTERLVL, OP_VALUE, CH_GLOBAL, 1023, 1.0f);
      klog("knobshim2: master level set to unity\n");
 
+     flx6_load_fx_config();
+
      last_beat_cc_val = -1;
      flx6_update_beat_fraction_led();
 
@@ -671,16 +798,43 @@ static void flx6_event(const struct snd_seq_event *ev)
           int note = ev->data.note.note;
           int on = (ev->type == SNDRV_SEQ_EVENT_NOTEON) && (ev->data.note.velocity > 0);
 
-          /* Channel CUE (PFL) on channels 0..3 */
-          if (ch >= 0 && ch <= 3 && note == N_CH_CUE) {
+          /* SHIFT + HEADPHONE CUE 1-4 (note 104 on ch 0..3): Switch Sound Color FX */
+          if (ch >= 0 && ch <= 3 && note == N_CH_CUE_SHIFT) {
                if (on) {
-                    int idx = (ch == CH_DECK2 || ch == CH_DECK4) ? 1 : 0;
+                    flx6_select_cfx_slot(ch);
+               }
+               return;
+          }
+
+          /* Channel CUE (PFL) on channels 0 & 1 only (Deck 1 & Deck 2) */
+          if ((ch == 0 || ch == 1) && note == N_CH_CUE) {
+               if (on) {
+                    int idx = ch;
                     int cur = me_get_cue(idx);
                     int want = (cur == 0) ? 1 : 0;
                     me_set_cue(idx, want);
                     if (verbose)
                          klog("knobshim2: FLX6 CH CUE ch%d -> idx%d cue=%d\n", ch + 1, idx, want);
                }
+               return;
+          }
+
+          /* Ignore Channel CUE on channels 2 & 3 (Deck 3 & 4 disabled) */
+          if ((ch == 2 || ch == 3) && note == N_CH_CUE) {
+               return;
+          }
+
+          /* Ignore Deck 3 & 4 button toggle */
+          if ((ch == CH_DECK1 || ch == CH_DECK2) && note == N_DECK_TOGGLE) {
+               if (on && verbose) {
+                    klog("knobshim2: FLX6 Deck 3/4 toggle ignored (2-deck standalone mode)\n");
+               }
+               return;
+          }
+
+          /* Discard all remaining events from Deck 3, Deck 4, and Decks 3/4 pads */
+          if (ch == CH_DECK3 || ch == CH_DECK4 ||
+              (ch >= CH_PADS3 && ch <= CH_PADS4S)) {
                return;
           }
 
@@ -800,20 +954,19 @@ static void flx6_event(const struct snd_seq_event *ev)
                return;
           }
 
-          /* +SHIFT + HOT CUE pad (Delete cue) on channels 8, 10, 12, 14 */
-          if ((ch == CH_PADS1S || ch == CH_PADS2S || ch == CH_PADS3S || ch == CH_PADS4S) &&
-              note >= 0 && note < 8) {
+          /* +SHIFT + HOT CUE pad (Delete cue) on channels 7 & 9 (+SHIFT: 8 & 10) */
+          if ((ch == CH_PADS1S || ch == CH_PADS2S) && note >= 0 && note < 8) {
                if (on) {
-                    int deck_idx = (ch == CH_PADS1S || ch == CH_PADS3S) ? 0 : 1;
+                    int deck_idx = (ch == CH_PADS1S) ? 0 : 1;
                     hotcue_delete(deck_idx, note + 1);
                }
                return;
           }
 
           /* 4-Beat Auto Loop / Active Loop: Long-press IN (20), +SHIFT IN (76), +SHIFT RELOOP (80) */
-          if (ch >= 0 && ch <= 3 && (note == N_IN_4BEAT || note == N_IN_SHIFT || note == N_RELOOP_SHIFT)) {
+          if ((ch == 0 || ch == 1) && (note == N_IN_4BEAT || note == N_IN_SHIFT || note == N_RELOOP_SHIFT)) {
                if (on) {
-                    int idx = (ch == CH_DECK2 || ch == CH_DECK4) ? 1 : 0;
+                    int idx = ch;
                     int sch = idx + 1;
                     send_rx_key(K_LOOPIN, OP_REPEAT, sch, 0);
                     send_rx_key(K_LOOPIN, OP_RELEASE, sch, 0);
@@ -839,14 +992,16 @@ static void flx6_event(const struct snd_seq_event *ev)
                     if (note_map[i].repeat)
                          send_rx_key(key, OP_REPEAT, note_map[i].sch, 0);
                     if (verbose || key == K_MEM_CUE || key == K_MEM_DEL || key == K_CALL_NEXT ||
-                        key == K_CALL_PREV || key == K_RELOOP || key == K_BFX || key == K_TEMPO_RANGE)
+                        key == K_CALL_PREV || key == K_RELOOP || key == K_BFX || key == K_TEMPO_RANGE ||
+                        key == K_SOURCE)
                          klog("knobshim2: FLX6 ch%d note%d -> key 0x%04x PRESS (deck %d)\n",
                               ch + 1, note, key, note_map[i].sch);
                } else if (!on && *p) {
                     *p = 0;
                     send_rx_key(key, OP_RELEASE, note_map[i].sch, 0);
                     if (verbose || key == K_MEM_CUE || key == K_MEM_DEL || key == K_CALL_NEXT ||
-                        key == K_CALL_PREV || key == K_RELOOP || key == K_BFX || key == K_TEMPO_RANGE)
+                        key == K_CALL_PREV || key == K_RELOOP || key == K_BFX || key == K_TEMPO_RANGE ||
+                        key == K_SOURCE)
                          klog("knobshim2: FLX6 ch%d note%d -> key 0x%04x RELEASE (deck %d)\n",
                               ch + 1, note, key, note_map[i].sch);
                }
@@ -856,6 +1011,11 @@ static void flx6_event(const struct snd_seq_event *ev)
           int ch = ev->data.control.channel;
           int cc = ev->data.control.param;
           int val = ev->data.control.value;
+
+          /* Discard all CCs from Deck 3 and Deck 4 */
+          if (ch == CH_DECK3 || ch == CH_DECK4) {
+               return;
+          }
 
           /* Browse knob on CH_MIX */
           if (ch == CH_MIX && (cc == CC_BROWSE || cc == CC_BROWSE_SHIFT)) {
@@ -869,15 +1029,15 @@ static void flx6_event(const struct snd_seq_event *ev)
                return;
           }
 
-          /* Jog wheel across decks 0..3 */
-          if (ch >= 0 && ch < 4 && (cc == CC_JOG_WHEEL || cc == CC_JOG_VINYL ||
-                                     cc == CC_JOG_NOVINYL || cc == CC_JOG_SHIFT)) {
+          /* Jog wheel across decks 0..1 */
+          if ((ch == 0 || ch == 1) && (cc == CC_JOG_WHEEL || cc == CC_JOG_VINYL ||
+                                       cc == CC_JOG_NOVINYL || cc == CC_JOG_SHIFT)) {
                flx6_jog(ch, val);
                return;
           }
 
-          /* Pitch fader across decks 0..3 */
-          if (ch >= 0 && ch < 4 && (cc == CC_TEMPO_MSB || cc == CC_TEMPO_LSB)) {
+          /* Pitch fader across decks 0..1 */
+          if ((ch == 0 || ch == 1) && (cc == CC_TEMPO_MSB || cc == CC_TEMPO_LSB)) {
                flx6_pitch(ch, cc, val);
                return;
           }
@@ -901,6 +1061,7 @@ static void flx6_event(const struct snd_seq_event *ev)
 static void flx6_tick(void)
 {
      flx6_jog_idle();
+     flx6_check_fx_config();
 
      /* Sync active slot FX type if changed on rbp screen */
      int cur_t = rbp_beatfx_type();
@@ -937,8 +1098,8 @@ static const struct led_notes flx6_leds = {
      .n_pad_base = { 0, 16, 32, 48 },
      .pad_enc = LED_ENC_NONE,
 
-     .strip_ch_first = 0,      /* Ch 1..4 */
-     .strip_count = 4,
+     .strip_ch_first = 0,      /* Ch 1..2 */
+     .strip_count = 2,
      .n_strip_cue = 84,
 
      .master_ch_first = 6,
@@ -954,7 +1115,7 @@ static const struct led_notes flx6_leds = {
           [LED_FX_CFX_SWEEP]   = -1,
      },
 
-     .meter_ch_first = 0,      /* Decks 1..4 -> channels 0..3 */
+     .meter_ch_first = 0,      /* Decks 1..2 -> channels 0..1 */
      .n_meter_cc = 2,          /* CC 2 */
      .meter_enc = METER_ENC_FLX4_LEVEL,
      .meter_pre_fader = 1,
