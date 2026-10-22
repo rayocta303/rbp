@@ -179,7 +179,7 @@
  * tick stops repainting entirely and the period stops mattering (MENU_PLANE,
  * drmband.h). This knob is what the fallback route is tuned by. One literal to
  * revert, or `POINT_MENU_MS=0.5` in the environment for a session. */
-#define MENU_MS_DEFAULT  0.1
+#define MENU_MS_DEFAULT  8.0
 #define MENU_US_MIN      50L
 
 /* How long to wait between attempts while there is no usable framebuffer. A

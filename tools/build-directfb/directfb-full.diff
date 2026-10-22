@@ -1,7 +1,8 @@
 diff --git a/lib/direct/Makefile.am b/lib/direct/Makefile.am
+index 32c9e642d..a06059cc7 100644
 --- a/lib/direct/Makefile.am
 +++ b/lib/direct/Makefile.am
-@@ -79,6 +79,7 @@ libdirect_la_SOURCES = \
+@@ -79,6 +79,7 @@ lib_LTLIBRARIES = libdirect.la
  libdirect_la_SOURCES = \
  	$(ppcasm_sources)	\
  	$(armasm_sources)	\
@@ -9,67 +10,8 @@ diff --git a/lib/direct/Makefile.am b/lib/direct/Makefile.am
  	clock.c			\
  	conf.c			\
  	debug.c			\
-diff --git a/lib/direct/compat_shim.c b/lib/direct/compat_shim.c
-new file mode 100644
---- /dev/null
-+++ b/lib/direct/compat_shim.c
-@@ -0,0 +1,55 @@
-+/*
-+ * compat_shim.c -- fstat() for a glibc 2.13 target built with modern headers.
-+ *
-+ * Why this exists
-+ * ---------------
-+ * The build compiles against the toolchain's own glibc 2.36 headers, because
-+ * the XDJ-RX3 rootfs ships no /usr/include at all.  It links against the
-+ * target's libc 2.13 instead (see the -L flags and "The link search path" in
-+ * tools/build-directfb/README.md), so almost every reference resolves at its
-+ * GLIBC_2.4 version and loads fine in the chroot.  fstat() is the one that
-+ * cannot: glibc 2.33 added a real fstat@GLIBC_2.33, and 2.13 -- like every
-+ * glibc before 2.33 -- only ever exported __fxstat()/__fxstat64(), which is
-+ * what its own headers emit for an fstat() call.  The reference is therefore
-+ * left unresolved, and the target's loader will not satisfy it
-+ * ("undefined symbol: fstat") when the call is finally reached.
-+ *
-+ * Why syscall() is byte-exact here
-+ * --------------------------------
-+ * On ARM, glibc's struct stat is the kernel's struct stat, and glibc's own
-+ * fstat() does no translation: it passes the caller's buffer straight to the
-+ * kernel (a tail call into fstatat() with AT_EMPTY_PATH; sys_fstat and
-+ * sys_fstatat share cp_new_stat()).  So syscall(SYS_fstat, fd, buf) fills
-+ * exactly the bytes glibc would have filled, st_rdev included -- which is what
-+ * systems/fbdev/vt.c reads out of it.  syscall() itself is GLIBC_2.4.
-+ *
-+ * fcntl() needs no shim: 2.13 exports fcntl@GLIBC_2.4, and our one call site
-+ * (systems/fbdev/fbdev.c, F_SETFD/FD_CLOEXEC) carries no struct, so it never
-+ * reaches for fcntl64().
-+ *
-+ * Duplicated on purpose
-+ * ---------------------
-+ * systems/fbdev/compat_shim.c holds the same forward.  DirectFB calls fstat()
-+ * from three files in three build units -- lib/direct/stream.c, the
-+ * src/media/idirectfbfont.c in libdirectfb, and systems/fbdev/vt.c -- and this
-+ * copy in libdirect fixes its own reference while exporting the symbol for
-+ * libdirectfb to bind against.  The module keeps its own so that it does not
-+ * depend on load order to resolve.  Keep the two files in step.
-+ *
-+ * This is not part of upstream DirectFB 1.4.16.
-+ */
-+#ifndef _GNU_SOURCE
-+#define _GNU_SOURCE     /* guarded: the build also passes -D_GNU_SOURCE on the
-+                           command line, and an unguarded define makes the
-+                           preprocessor warn "_GNU_SOURCE redefined" -- the one
-+                           warning these two files would otherwise add */
-+#endif
-+#include <sys/stat.h>
-+#include <sys/syscall.h>
-+#include <unistd.h>
-+
-+int
-+fstat (int fd, struct stat *buf)
-+{
-+     return syscall (SYS_fstat, fd, buf);
-+}
 diff --git a/lib/direct/modules.c b/lib/direct/modules.c
+index 57e63822f..75efda355 100644
 --- a/lib/direct/modules.c
 +++ b/lib/direct/modules.c
 @@ -137,6 +137,7 @@ direct_modules_register( DirectModuleDir *directory,
@@ -80,7 +22,7 @@ diff --git a/lib/direct/modules.c b/lib/direct/modules.c
            D_ERROR( "Direct/Modules: ABI version of '%s' (%d) does not match %d!\n",
                     entry->file ? entry->file : entry->name,
                     abi_version, directory->abi_version );
-@@ -210,8 +211,10 @@ direct_modules_explore_directory( DirectModuleDir *dir
+@@ -210,8 +211,10 @@ direct_modules_explore_directory( DirectModuleDir *directory )
       buf = alloca( strlen(pathfront) + 1 + strlen(path) + 1 ); /* pre, slash, post, 0 */
       sprintf( buf, "%s/%s", pathfront, path );
  
@@ -91,7 +33,7 @@ diff --git a/lib/direct/modules.c b/lib/direct/modules.c
            D_DEBUG_AT( Direct_Modules, "  -> ERROR opening directory: %s!\n", strerror(errno) );
            return 0;
       }
-@@ -248,6 +251,7 @@ direct_modules_explore_directory( DirectModuleDir *dir
+@@ -248,6 +251,7 @@ direct_modules_explore_directory( DirectModuleDir *directory )
            directory->loading = module;
  
            if ((handle = open_module( module )) != NULL) {
@@ -108,6 +50,7 @@ diff --git a/lib/direct/modules.c b/lib/direct/modules.c
            D_DLERROR( "Direct/Modules: Unable to dlopen `%s'!\n", buf );
  
 diff --git a/src/core/core.c b/src/core/core.c
+index 88b5b6357..e1a9784c6 100644
 --- a/src/core/core.c
 +++ b/src/core/core.c
 @@ -275,6 +275,7 @@ dfb_core_create( CoreDFB **ret_core )
@@ -122,7 +65,7 @@ diff --git a/src/core/core.c b/src/core/core.c
  
       core_dfb = core;
  
-+     { FILE*f=fopen("/tmp/dfbdig6.log","a"); if(f){fprintf(f,"core: fusion_enter session=%s\n", dfb_config->session?dfb_config->session:"()"); fclose(f);} }
++     { FILE*f=fopen("/tmp/dfbdig6.log","a"); if(f){fprintf(f,"core: fusion_enter session=%d\n", dfb_config->session); fclose(f);} }
       ret = fusion_enter( dfb_config->session, DIRECTFB_CORE_ABI, FER_ANY, &core->world );
 +     { FILE*f=fopen("/tmp/dfbdig6.log","a"); if(f){fprintf(f,"core: fusion_enter ret=%d\n",(int)ret); fclose(f);} }
       if (ret)
@@ -147,6 +90,7 @@ diff --git a/src/core/core.c b/src/core/core.c
                 return ret;
            }
 diff --git a/src/core/layer_context.c b/src/core/layer_context.c
+index 2265f4b0f..ef142a8b0 100644
 --- a/src/core/layer_context.c
 +++ b/src/core/layer_context.c
 @@ -250,6 +250,7 @@ dfb_layer_context_init( CoreLayerContext *context,
@@ -174,6 +118,7 @@ diff --git a/src/core/layer_context.c b/src/core/layer_context.c
                     D_DERROR( ret, "DirectFB/core/layers: "
                               "Could not set layer context config!\n" );
 diff --git a/src/core/local_surface_pool.c b/src/core/local_surface_pool.c
+index f52e8c8cc..289dc559b 100644
 --- a/src/core/local_surface_pool.c
 +++ b/src/core/local_surface_pool.c
 @@ -148,6 +148,8 @@ localAllocateBuffer( CoreSurfacePool       *pool,
@@ -186,6 +131,7 @@ diff --git a/src/core/local_surface_pool.c b/src/core/local_surface_pool.c
  
       allocation->flags = CSALF_VOLATILE;
 diff --git a/src/core/system.c b/src/core/system.c
+index 37a7a9f79..b1b563ac3 100644
 --- a/src/core/system.c
 +++ b/src/core/system.c
 @@ -271,6 +271,7 @@ dfb_system_lookup( void )
@@ -197,6 +143,7 @@ diff --git a/src/core/system.c b/src/core/system.c
       direct_list_foreach( l, dfb_core_systems.entries ) {
            DirectModuleEntry     *module = (DirectModuleEntry*) l;
 diff --git a/src/core/windowstack.c b/src/core/windowstack.c
+index 848b2dfba..aea8388a8 100644
 --- a/src/core/windowstack.c
 +++ b/src/core/windowstack.c
 @@ -199,6 +199,7 @@ dfb_windowstack_create( CoreLayerContext *context )
@@ -216,6 +163,7 @@ diff --git a/src/core/windowstack.c b/src/core/windowstack.c
            D_MAGIC_CLEAR( stack );
            SHFREE( context->shmpool, stack );
 diff --git a/src/directfb.c b/src/directfb.c
+index fe7477a22..ba0cc367b 100644
 --- a/src/directfb.c
 +++ b/src/directfb.c
 @@ -197,9 +197,12 @@ DirectFBCreate( IDirectFB **interface )
@@ -232,9 +180,10 @@ diff --git a/src/directfb.c b/src/directfb.c
       DIRECT_ALLOCATE_INTERFACE( dfb, IDirectFB );
  
 diff --git a/src/idirectfb.c b/src/idirectfb.c
+index a8ceed1c2..594c4ac6b 100644
 --- a/src/idirectfb.c
 +++ b/src/idirectfb.c
-@@ -1193,6 +1193,7 @@ IDirectFB_CreateEventBuffer( IDirectFB             *th
+@@ -1193,6 +1193,7 @@ IDirectFB_CreateEventBuffer( IDirectFB             *thiz,
       DFBResult             ret;
       IDirectFBEventBuffer *iface;
  
@@ -242,7 +191,7 @@ diff --git a/src/idirectfb.c b/src/idirectfb.c
       DIRECT_INTERFACE_GET_DATA(IDirectFB)
  
       D_DEBUG_AT( IDFB, "%s( %p )\n", __FUNCTION__, thiz );
-@@ -1220,6 +1221,7 @@ IDirectFB_CreateInputEventBuffer( IDirectFB           
+@@ -1220,6 +1221,7 @@ IDirectFB_CreateInputEventBuffer( IDirectFB                   *thiz,
       IDirectFBEventBuffer      *iface;
       CreateEventBuffer_Context context;
  
@@ -251,9 +200,10 @@ diff --git a/src/idirectfb.c b/src/idirectfb.c
  
       D_DEBUG_AT( IDFB, "%s( %p )\n", __FUNCTION__, thiz );
 diff --git a/systems/fbdev/Makefile.am b/systems/fbdev/Makefile.am
+index cf4ff8fb7..3a5cf4f6e 100644
 --- a/systems/fbdev/Makefile.am
 +++ b/systems/fbdev/Makefile.am
-@@ -33,6 +33,7 @@ libdirectfb_fbdev_la_SOURCES = \
+@@ -33,6 +33,7 @@ libdirectfb_fbdev_la_LDFLAGS = \
  	$(SYSFS_LIBS)
  
  libdirectfb_fbdev_la_SOURCES = \
@@ -261,47 +211,8 @@ diff --git a/systems/fbdev/Makefile.am b/systems/fbdev/Makefile.am
  	agp.c			\
  	fbdev.c			\
  	fbdev_surface_pool.c	\
-diff --git a/systems/fbdev/compat_shim.c b/systems/fbdev/compat_shim.c
-new file mode 100644
---- /dev/null
-+++ b/systems/fbdev/compat_shim.c
-@@ -0,0 +1,35 @@
-+/*
-+ * compat_shim.c -- fstat() for a glibc 2.13 target built with modern headers.
-+ *
-+ * Our headers are glibc 2.36 (the target rootfs ships no /usr/include), so
-+ * fstat() compiles into a reference on fstat@GLIBC_2.33; the target's libc
-+ * 2.13 only ever exported __fxstat()/__fxstat64().  syscall(SYS_fstat) fills
-+ * the caller's buffer exactly as glibc would -- on ARM the struct is the
-+ * kernel's, passed straight through (glibc's fstat() is a tail call into
-+ * fstatat() with AT_EMPTY_PATH) -- and syscall() is GLIBC_2.4.  vt.c reads
-+ * sbf.st_rdev out of that struct, so "exactly as glibc would" is the whole
-+ * requirement.
-+ *
-+ * Identical to lib/direct/compat_shim.c, which covers libdirect's own fstat()
-+ * reference (stream.c) and exports the symbol for libdirectfb
-+ * (src/media/idirectfbfont.c).  This copy exists so the dlopen'd fbdev module
-+ * resolves its own reference without depending on load order.  Keep the two in
-+ * step; see tools/build-directfb/README.md for the measurements.
-+ *
-+ * This is not part of upstream DirectFB 1.4.16.
-+ */
-+#ifndef _GNU_SOURCE
-+#define _GNU_SOURCE     /* guarded: the build also passes -D_GNU_SOURCE on the
-+                           command line, and an unguarded define makes the
-+                           preprocessor warn "_GNU_SOURCE redefined" -- the one
-+                           warning these two files would otherwise add */
-+#endif
-+#include <sys/stat.h>
-+#include <sys/syscall.h>
-+#include <unistd.h>
-+
-+int
-+fstat (int fd, struct stat *buf)
-+{
-+     return syscall (SYS_fstat, fd, buf);
-+}
 diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
+index 36c295e97..30a0e1ac1 100644
 --- a/systems/fbdev/fbdev.c
 +++ b/systems/fbdev/fbdev.c
 @@ -33,6 +33,7 @@
@@ -325,11 +236,10 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
  
  #include <misc/conf.h>
  #include <misc/util.h>
-@@ -115,7 +122,458 @@ static int fbdev_ioctl( int request, void *arg, int ar
- static int fbdev_ioctl( int request, void *arg, int arg_size );
+@@ -116,6 +123,462 @@ static int fbdev_ioctl( int request, void *arg, int arg_size );
  
  #define FBDEV_IOCTL(request,arg)   fbdev_ioctl( request, arg, sizeof(*(arg)) )
-+
+ 
 +extern FBDev *dfb_fbdev;   /* defined further below */
 +
 +/* The one-shot frame-budget line.  The first presents of a run carry rbp's own
@@ -570,18 +480,18 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
 + */
 +static void
 +fbdev_fill_bars( unsigned char *dst, int fw, int fh, int fpitch, int dbpp,
-+                 int dx, int dy, int sw, int sh )
++                 int dx, int dy, int bw, int bh )
 +{
 +     int y;
 +
 +     for (y = 0; y < dy && y < fh; y++)                     /* above the surface */
 +          fbdev_fill_span( dst + y * fpitch, 0, fw, dbpp );
 +
-+     for (; y < dy + sh && y < fh; y++) {                   /* beside it */
++     for (; y < dy + bh && y < fh; y++) {                   /* beside it */
 +          unsigned char *row = dst + y * fpitch;
 +
 +          fbdev_fill_span( row, 0, dx, dbpp );
-+          fbdev_fill_span( row, dx + sw, fw, dbpp );
++          fbdev_fill_span( row, dx + bw, fw, dbpp );
 +     }
 +
 +     for (; y < fh; y++)                                    /* below it */
@@ -637,7 +547,7 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
 +          }
 +          return;
 +     }
- 
++
 +     switch (deg) {
 +     case 90: /* left / counter-clockwise: dst(y, sw-1-x) = src(x,y) */
 +          for (y = 0; y < (unsigned)sh; y++) {
@@ -703,7 +613,10 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
 +          if (dw == sw && dh == sh)
 +               goto one_to_one;
 +
-+          fbdev_fill_bars( dst, fw, fh, fpitch, dbpp, dx, dy, dw, dh );
++          if (!dfb_fbdev->shared->bars_filled) {
++               fbdev_fill_bars( dst, fw, fh, fpitch, dbpp, dx, dy, dw, dh );
++               dfb_fbdev->shared->bars_filled = 1;
++          }
 +          fbdev_present_scale( src, sw, sh, spitch, sbpp, dst, fpitch, dbpp,
 +                               dx, dy, dw, dh );
 +          return;
@@ -737,8 +650,10 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
 +     if (rows <= 0)
 +          return;
 +
-+     if (mode == PRESENT_LETTERBOX)
++     if (mode == PRESENT_LETTERBOX && !dfb_fbdev->shared->bars_filled) {
 +          fbdev_fill_bars( dst, fw, fh, fpitch, dbpp, dx, dy, sw, sh );
++          dfb_fbdev->shared->bars_filled = 1;
++     }
 +
 +     /* The whole frame in one copy: same format, no offset, strides agree.  This
 +        is the case a Pi-like fb is in, and it is a single 2 MB memcpy. */
@@ -784,14 +699,12 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
  FBDev *dfb_fbdev = NULL;
  
  /******************************************************************************/
-@@ -273,23 +731,26 @@ static DFBResult dfb_fbdev_open( void )
+@@ -273,23 +736,26 @@ void waitretrace (void)
  
  static DFBResult dfb_fbdev_open( void )
  {
 -     DFBResult error_result = DFB_FAILURE;
-+     DFBResult   error_result = DFB_FAILURE;
-+     const char *fbdev;
- 
+-
 -     if (dfb_config->fb_device) {
 -          dfb_fbdev->fd = open( dfb_config->fb_device, O_RDWR );
 -          if (dfb_fbdev->fd < 0) {
@@ -801,9 +714,9 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
 -               error_result = errno2result( errno );
 -               goto error;
 -          }
--     }
--     else if (getenv( "FRAMEBUFFER" ) && *getenv( "FRAMEBUFFER" ) != '\0') {
--          dfb_fbdev->fd = open( getenv ("FRAMEBUFFER"), O_RDWR );
++     DFBResult   error_result = DFB_FAILURE;
++     const char *fbdev;
++
 +     /* Which framebuffer.  dfb_config->fb_device is the directfbrc 'fbdev='
 +      * option, which still wins because it is the one DirectFB documented for
 +      * years; FB_DEV is the launcher's knob (rb.conf's RB_FB_DEV, exported by
@@ -815,7 +728,9 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
 +               fbdev = getenv( "FB_DEV" );
 +          else if (getenv( "FRAMEBUFFER" ) && *getenv( "FRAMEBUFFER" ) != '\0')
 +               fbdev = getenv( "FRAMEBUFFER" );
-+     }
+      }
+-     else if (getenv( "FRAMEBUFFER" ) && *getenv( "FRAMEBUFFER" ) != '\0') {
+-          dfb_fbdev->fd = open( getenv ("FRAMEBUFFER"), O_RDWR );
 +
 +     if (fbdev && *fbdev) {
 +          dfb_fbdev->fd = open( fbdev, O_RDWR );
@@ -826,7 +741,7 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
  
                 error_result = errno2result( errno );
                 goto error;
-@@ -461,6 +922,7 @@ system_initialize( CoreDFB *core, void **data )
+@@ -461,6 +927,7 @@ system_initialize( CoreDFB *core, void **data )
  
       dfb_fbdev->core   = core;
       dfb_fbdev->shared = shared;
@@ -834,7 +749,7 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
  
       page_size = direct_pagesize();
  
-@@ -515,9 +977,332 @@ system_initialize( CoreDFB *core, void **data )
+@@ -515,10 +982,328 @@ system_initialize( CoreDFB *core, void **data )
                      "Could not disable console acceleration!\n" );
            goto error;
       }
@@ -842,7 +757,7 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
  
       dfb_fbdev_var_to_mode( &shared->current_var,
                              &shared->current_mode );
-+
+ 
 +     /* PRESENTATION.  Two things happen here, in this order:
 +      *
 +      * 1. the REAL fb geometry is read with raw syscalls.  It has to be: the
@@ -1065,11 +980,6 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
 +                    if (s > 0)
 +                         shared->present_skip = s > 8 ? 8 : s;
 +               }
-+               else {
-+                    while (shared->present_skip < 4 &&
-+                           cost > budget * shared->present_skip)
-+                         shared->present_skip++;
-+               }
 +
 +               if (cost > 2 * budget) {
 +                    /* Loud and one-shot, and the honest answer: a skip of 4 is not
@@ -1164,10 +1074,11 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
 +               fprintf(f,"\n");
 +               fclose(f);} }
 +     }
- 
++
       shared->orig_cmap_memory = SHMALLOC( pool_data, 256 * 2 * 4 );
       if (!shared->orig_cmap_memory) {
-@@ -598,6 +1383,15 @@ error:
+           ret = D_OOSHM();
+@@ -598,6 +1383,15 @@ system_initialize( CoreDFB *core, void **data )
  
  error:
       if (shared) {
@@ -1263,7 +1174,7 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
                 if (ret)
                      return ret;
            }
-@@ -1485,12 +2334,114 @@ primaryFlipRegion( CoreLayer             *layer,
+@@ -1485,11 +2334,124 @@ primaryFlipRegion( CoreLayer             *layer,
           !dfb_config->pollvsync_after)
            dfb_screen_wait_vsync( dfb_screens_at(DSCID_PRIMARY) );
  
@@ -1322,6 +1233,12 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
 +                                      shared->present_dx, shared->present_dy,
 +                                      shared->present_dw, shared->present_dh );
 +
++               {
++                    extern void menu_frame_tick(void) __attribute__((weak));
++                    if (menu_frame_tick)
++                         menu_frame_tick();
++               }
++
 +               if (shared->present_mode == PRESENT_SCALE) {
 +                    long long us = direct_clock_get_micros() - t0;
 +
@@ -1337,7 +1254,7 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
 +                         shared->present_warm_done += 1;
 +                    }
 +               }
- 
++
 +               ret = dfb_fbdev_pan( config->source.x,
 +                                    shared->present_pan ? idx * fh + config->source.y : 0,
 +                                    (flags & DSFLIP_WAITFORSYNC) == DSFLIP_ONSYNC );
@@ -1376,14 +1293,18 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
 +          ret = dfb_fbdev_pan( config->source.x,
 +                               lock->offset / lock->pitch + config->source.y,
 +                               (flags & DSFLIP_WAITFORSYNC) == DSFLIP_ONSYNC );
++          {
++               extern void menu_frame_tick(void) __attribute__((weak));
++               if (menu_frame_tick)
++                    menu_frame_tick();
++          }
 +          if (ret)
 +               return ret;
 +     }
-+
+ 
       if ((flags & DSFLIP_WAIT) &&
           (dfb_config->pollvsync_after || !(flags & DSFLIP_ONSYNC)))
-           dfb_screen_wait_vsync( dfb_screens_at(DSCID_PRIMARY) );
-@@ -1542,6 +2493,14 @@ dfb_fbdev_pan( int xoffset, int yoffset, bool onsync )
+@@ -1542,6 +2504,14 @@ dfb_fbdev_pan( int xoffset, int yoffset, bool onsync )
  
       var = &shared->current_var;
  
@@ -1398,7 +1319,7 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
       if (var->xres_virtual < xoffset + var->xres) {
            D_ERROR( "DirectFB/FBDev: xres %d, vxres %d, xoffset %d\n",
                      var->xres, var->xres_virtual, xoffset );
-@@ -1670,22 +2629,31 @@ dfb_fbdev_mode_to_var( const VideoMode           *mode
+@@ -1670,20 +2640,29 @@ dfb_fbdev_mode_to_var( const VideoMode           *mode,
       else
            var.yoffset = 0;
  
@@ -1420,28 +1341,25 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
            case DLBM_TRIPLE:
 -               if (shared->fix.ypanstep == 0 && shared->fix.ywrapstep == 0)
 -                    return DFB_UNSUPPORTED;
-+          case DLBM_BACKVIDEO:
+-
+-               var.yres_virtual *= 3;
+-               break;
+-
+           case DLBM_BACKVIDEO:
+-               if (shared->fix.ypanstep == 0 && shared->fix.ywrapstep == 0)
+-                    return DFB_UNSUPPORTED;
 +               if (shared->present_pages < (buffermode == DLBM_TRIPLE ? 3 : 2))
 +                    break;   /* more buffers than pages -> single front buffer below */
  
--               var.yres_virtual *= 3;
+-               var.yres_virtual *= 2;
 +               if (buffermode == DLBM_TRIPLE)
 +                    var.yres_virtual *= 3;
 +               else
 +                    var.yres_virtual *= 2;
                 break;
  
--          case DLBM_BACKVIDEO:
--               if (shared->fix.ypanstep == 0 && shared->fix.ywrapstep == 0)
--                    return DFB_UNSUPPORTED;
--
--               var.yres_virtual *= 2;
--               break;
--
            case DLBM_BACKSYSTEM:
-           case DLBM_FRONTONLY:
-                break;
-@@ -1694,6 +2662,7 @@ dfb_fbdev_mode_to_var( const VideoMode           *mode
+@@ -1694,6 +2673,7 @@ dfb_fbdev_mode_to_var( const VideoMode           *mode,
                 return DFB_UNSUPPORTED;
       }
  
@@ -1449,7 +1367,7 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
       /* Set pixel format */
       var.bits_per_pixel = DFB_BITS_PER_PIXEL(pixelformat);
       var.transp.length  = var.transp.offset = 0;
-@@ -1887,6 +2856,34 @@ dfb_fbdev_test_mode( const VideoMode             *mode
+@@ -1887,6 +2867,34 @@ dfb_fbdev_test_mode( const VideoMode             *mode,
       D_ASSERT( mode != NULL );
       D_ASSERT( config != NULL );
  
@@ -1484,7 +1402,7 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
       /* Is panning supported? */
       if (source->w != mode->xres && shared->fix.xpanstep == 0)
            return DFB_UNSUPPORTED;
-@@ -1898,9 +2895,63 @@ dfb_fbdev_test_mode( const VideoMode             *mode
+@@ -1898,8 +2906,62 @@ dfb_fbdev_test_mode( const VideoMode             *mode,
       if (ret)
            return ret;
  
@@ -1549,8 +1467,7 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
       if (shared->fix.smem_len < need_mem) {
            D_DEBUG_AT( FBDev_Mode, "  => not enough framebuffer memory (%u < %u)!\n",
                        shared->fix.smem_len, need_mem );
- 
-@@ -2012,14 +3091,33 @@ dfb_fbdev_set_mode( const VideoMode         *mode,
+@@ -2012,14 +3074,33 @@ dfb_fbdev_set_mode( const VideoMode         *mode,
            return ret;
       }
  
@@ -1570,8 +1487,8 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
 +               var.grayscale      = real.grayscale;
 +          }
 +     }
- 
 +
+ 
       dfb_gfxcard_lock( GDLF_WAIT | GDLF_SYNC | GDLF_RESET | GDLF_INVALIDATE );
  
       if (FBDEV_IOCTL( FBIOPUT_VSCREENINFO, &var )) {
@@ -1588,7 +1505,7 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
       }
  
       if (FBDEV_IOCTL( FBIOGET_VSCREENINFO, &var2 )) {
-@@ -2032,17 +3130,28 @@ dfb_fbdev_set_mode( const VideoMode         *mode,
+@@ -2032,17 +3113,28 @@ dfb_fbdev_set_mode( const VideoMode         *mode,
       if (var.xres != var2.xres || var.xres_virtual != var2.xres_virtual ||
           var.yres != var2.yres || var.yres_virtual != var2.yres_virtual)
       {
@@ -1624,7 +1541,7 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
  
       shared->current_var = var;
       dfb_fbdev_var_to_mode( &var, &shared->current_mode );
-@@ -2391,6 +3500,14 @@ dfb_fbdev_set_rgb332_palette( void )
+@@ -2391,6 +3483,14 @@ dfb_fbdev_set_rgb332_palette( void )
       return ret;
  }
  
@@ -1639,7 +1556,7 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
  static FusionCallHandlerResult
  fbdev_ioctl_call_handler( int           caller,
                            int           call_arg,
-@@ -2403,6 +3520,8 @@ fbdev_ioctl_call_handler( int           caller,
+@@ -2403,6 +3503,8 @@ fbdev_ioctl_call_handler( int           caller,
       const char cursoroff_str[] = "\033[?1;0;0c";
       const char blankoff_str[] = "\033[9;0]";
  
@@ -1648,7 +1565,7 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
       if (dfb_config->vt && !dfb_config->kd_graphics && call_arg == FBIOPUT_VSCREENINFO)
            ioctl( dfb_fbdev->vt->fd, KDSETMODE, KD_GRAPHICS );
  
-@@ -2416,6 +3535,8 @@ fbdev_ioctl_call_handler( int           caller,
+@@ -2416,6 +3518,8 @@ fbdev_ioctl_call_handler( int           caller,
            write( dfb_fbdev->vt->fd, blankoff_str, strlen(blankoff_str) );
       }
  
@@ -1658,9 +1575,10 @@ diff --git a/systems/fbdev/fbdev.c b/systems/fbdev/fbdev.c
  
       return FCHR_RETURN;
 diff --git a/systems/fbdev/fbdev.h b/systems/fbdev/fbdev.h
+index d2f5be2ee..18c908850 100644
 --- a/systems/fbdev/fbdev.h
 +++ b/systems/fbdev/fbdev.h
-@@ -98,8 +98,151 @@ typedef struct {
+@@ -98,8 +98,152 @@ typedef struct {
       CoreLayerRegionConfig    config;
  
       SurfaceManager          *manager;
@@ -1755,6 +1673,7 @@ diff --git a/systems/fbdev/fbdev.h b/systems/fbdev/fbdev.h
 +     long long                present_warm_mus;
 +     long long                present_max_us;
 +     int                      present_reported;
++     int                      bars_filled;
 +     int                      rot_deg;
 +     int                      rot_sw;
 +     int                      rot_sh;
@@ -1813,6 +1732,7 @@ diff --git a/systems/fbdev/fbdev.h b/systems/fbdev/fbdev.h
       FBDevShared             *shared;
  
 diff --git a/systems/fbdev/fbdev_surface_pool.c b/systems/fbdev/fbdev_surface_pool.c
+index 65ef3d770..47ecb0666 100644
 --- a/systems/fbdev/fbdev_surface_pool.c
 +++ b/systems/fbdev/fbdev_surface_pool.c
 @@ -362,8 +362,23 @@ fbdevLock( CoreSurfacePool       *pool,
@@ -1857,28 +1777,29 @@ diff --git a/systems/fbdev/fbdev_surface_pool.c b/systems/fbdev/fbdev_surface_po
                   lock->offset, lock->pitch, lock->addr, lock->phys );
  
 diff --git a/wm/default/default.c b/wm/default/default.c
+index e7d1e639b..2708292d6 100644
 --- a/wm/default/default.c
 +++ b/wm/default/default.c
-@@ -2768,9 +2768,6 @@ handle_button_press( CoreWindowStack     *stack,
-      D_ASSERT( data != NULL );
+@@ -2769,9 +2769,6 @@ handle_button_press( CoreWindowStack     *stack,
       D_ASSERT( event != NULL );
       D_ASSERT( event->type == DIET_BUTTONPRESS );
--
+ 
 -     if (!stack->cursor.enabled)
 -          return DFB_OK;
- 
+-
       switch (data->wm_level) {
            case 1:
-@@ -2802,9 +2799,6 @@ handle_button_release( CoreWindowStack     *stack,
-      D_ASSERT( data != NULL );
+                window = data->entered_window;
+@@ -2803,9 +2800,6 @@ handle_button_release( CoreWindowStack     *stack,
       D_ASSERT( event != NULL );
       D_ASSERT( event->type == DIET_BUTTONRELEASE );
--
+ 
 -     if (!stack->cursor.enabled)
 -          return DFB_OK;
- 
+-
       switch (data->wm_level) {
            case 1:
+                break;
 @@ -2838,10 +2832,7 @@ perform_motion( CoreWindowStack *stack,
       D_ASSERT( stack != NULL );
       D_ASSERT( data != NULL );

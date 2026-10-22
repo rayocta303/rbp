@@ -38,6 +38,15 @@ int cc_to_10bit(int v);
  * is not distinguishable from a real answer, and does not need to be -- a map's
  * event handler only runs once rbp's KeyManager exists. */
 int rbp_beatfx_type(void);
+int rbp_beatfx_numer(void);
+int rbp_beatfx_denom(void);
+int rbp_beatfx_on(void);
+int rbp_is_looping(int deck);
+int rbp_is_canreloop(int deck);
+long rbp_get_playing_pos(int deck);
+int rbp_has_arrived_at_end(int deck);
+int rbp_is_playing(int deck);
+int rbp_is_loaded(int deck);
 
 /* djengine::MixerEngine. Everything here tolerates the engine not existing yet
  * and returns a neutral value (-1 from the getters, a no-op from the setters),

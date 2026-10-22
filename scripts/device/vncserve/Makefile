@@ -46,7 +46,7 @@ TESTS := $(patsubst test_%.c,test_%,$(wildcard test_*.c))
 all: vncserve
 
 vncserve: vncserve.c $(LIB)
-	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $^ $(ZLIB)
+	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $^ $(ZLIB) -lm
 
 test: $(TESTS)
 	@set -e; for t in $(TESTS); do printf '== %s\n' "$$t"; ./$$t; done

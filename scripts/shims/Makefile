@@ -27,7 +27,11 @@ RX3ULIB := $(RX3)/usr/lib
 COMPAT  ?= compat
 
 CFLAGS  := -O2 -march=armv5t -mfloat-abi=soft -fno-stack-protector -fPIC \
-           -Wall -Wextra -Wno-unused-parameter
+           -Wall -Wextra -Wno-unused-parameter \
+           -std=gnu11 \
+           -U_FILE_OFFSET_BITS -D_FILE_OFFSET_BITS=32 \
+           -U_TIME_BITS -D_TIME_BITS=32 \
+           -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0
 LDFLAGS := -L$(COMPAT) -L$(RX3LIB) -L$(RX3ULIB) -Wl,-rpath-link,$(RX3LIB):$(RX3ULIB)
 
 $(COMPAT)/libc_nonshared.a $(COMPAT)/libpthread_nonshared.a:
@@ -159,6 +163,10 @@ keylog.o: keylog.c keylog.h
 keylog_state.o: keylog_state.c keylog_state.h keylog.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+compat_glibc.o: compat_glibc.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+
 # rbp_key.o is the second object both libraries link: the key path (are we rbp,
 # where its KeyManager is, how to send it a keycode -- see rbp_key.h). It is
 # deliberately NOT in either object list below, because those two lists are
@@ -241,7 +249,7 @@ rbp_key.o: rbp_key.c rbp_key.h rbp_abi.h syscalls.h
 # (annotated in the sources), and shmstate.o's globals, which the audio shim
 # reads out of the global scope. (rbp_key.o is the third object outside this
 # list; it is hidden too, and says why in its own rule above.)
-CTRL_OBJS  := ctrlshim.o ctrl_map.o map_flx4.o map_jp21.o map_kbd.o evdev_io.o \
+CTRL_OBJS  := ctrlshim.o ctrl_map.o map_flx4.o map_flx6.o map_jp21.o map_kbd.o evdev_io.o \
               mididump.o rbp_bridge.o rbp_led.o led_table.o plinn_scan.o \
               rbp_vu.o midi_io.o controllers.o shimutil.o usb_label.o rbp_load.o
 CTRL_HDRS  := rbp_abi.h rbp_bridge.h rbp_key.h rbp_led.h led_table.h rbp_vu.h \
@@ -249,12 +257,12 @@ CTRL_HDRS  := rbp_abi.h rbp_bridge.h rbp_key.h rbp_led.h led_table.h rbp_vu.h \
               shmstate.h plinn_scan.h controllers.h usb_label.h pitch_state.h \
               rbp_load.h
 knobshim.so: $(CTRL_OBJS) rbp_key.o shmstate.o fader_state.o rbp_transport.o \
-             pitch_state.o keylog.o keylog_state.o $(CTRL_HDRS) rbp_transport.h \
+             pitch_state.o keylog.o keylog_state.o compat_glibc.o $(CTRL_HDRS) rbp_transport.h \
              pitch_state.h keylog.h keylog_state.h \
              $(COMPAT)/libc_nonshared.a $(COMPAT)/libpthread_nonshared.a
 	$(CC) $(CFLAGS) -shared -o $@ $(CTRL_OBJS) rbp_key.o shmstate.o \
-	    fader_state.o rbp_transport.o pitch_state.o keylog.o keylog_state.o \
-	    -lpthread -lm -lc $(LDFLAGS)
+	    fader_state.o rbp_transport.o pitch_state.o keylog.o keylog_state.o compat_glibc.o \
+	    -lpthread -lrt -lm -lc $(LDFLAGS)
 
 $(CTRL_OBJS): %.o: %.c $(CTRL_HDRS)
 	$(CC) $(CFLAGS) -fvisibility=hidden -c -o $@ $<
@@ -283,10 +291,10 @@ $(CTRL_OBJS): %.o: %.c $(CTRL_HDRS)
 # rbp_vu.c's log10() and rbp_led.c. A host libm here would stamp GLIBC_2.29+
 # references and the shim would refuse to load in the glibc-2.13 chroot.
 audioshim.so: audioshim.o s24pack.o mirror_policy.o master_policy.o \
-              pace_policy.o controllers.o usb_devices.o
+              pace_policy.o controllers.o usb_devices.o compat_glibc.o
 	$(CC) $(CFLAGS) -shared -o $@ audioshim.o s24pack.o mirror_policy.o \
-	    master_policy.o pace_policy.o controllers.o usb_devices.o \
-	    $(RX3LIB)/libdl.so.2 -lm -lc \
+	    master_policy.o pace_policy.o controllers.o usb_devices.o compat_glibc.o \
+	    $(RX3LIB)/libdl.so.2 -lrt -lm -lc \
 	    $(LDFLAGS)
 
 audioshim.o: audioshim.c shmstate.h envutil.h s24pack.h mirror_policy.h \
@@ -400,11 +408,11 @@ FBSHIM_HDRS := tscfake.h pointsrc.h point_xform.h touch_zone.h syscalls.h \
                settings_zone.h settings_paint.h controllers.h usb_devices.h
 
 fbshim.so: $(FBSHIM_OBJS) rbp_key.o fader_state.o rbp_transport.o pitch_state.o \
-           keylog.o keylog_state.o $(FBSHIM_HDRS) rbp_transport.h pitch_state.h \
+           keylog.o keylog_state.o compat_glibc.o $(FBSHIM_HDRS) rbp_transport.h pitch_state.h \
            keylog.h keylog_state.h \
            $(COMPAT)/libc_nonshared.a $(COMPAT)/libpthread_nonshared.a
 	$(CC) $(CFLAGS) -shared -o $@ $(FBSHIM_OBJS) rbp_key.o fader_state.o \
-	    rbp_transport.o pitch_state.o keylog.o keylog_state.o -lpthread -lm -lc \
+	    rbp_transport.o pitch_state.o keylog.o keylog_state.o compat_glibc.o -lpthread -lrt -lm -lc \
 	    $(LDFLAGS)
 
 fb_shim.o: fb_shim.c pointsrc.h $(FBSHIM_HDRS)
@@ -540,9 +548,9 @@ netalias.o: netalias.c netalias.h
 # empty stub above is a prerequisite too. pthread_create resolves against the
 # libpthread rbp itself is already using -- juce::Thread is pthreads underneath
 # -- so this adds a dependency rbp has satisfied since it started.
-netshim.so: netshim.c netalias.o netalias.h envutil.h \
+netshim.so: netshim.c netalias.o compat_glibc.o netalias.h envutil.h \
             $(COMPAT)/libc_nonshared.a $(COMPAT)/libpthread_nonshared.a
-	$(CC) $(CFLAGS) -shared -o $@ netshim.c netalias.o \
+	$(CC) $(CFLAGS) -shared -o $@ netshim.c netalias.o compat_glibc.o \
 	    $(RX3LIB)/libdl.so.2 -lpthread -lc $(LDFLAGS)
 
 # The witness's test subject. Must NOT be -static: LD_PRELOAD needs a dynamic

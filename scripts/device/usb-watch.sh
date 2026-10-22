@@ -126,11 +126,21 @@ list_media_sds() {
         case "$tgt" in *"/usb"[0-9]*) ;; *) continue ;; esac
         echo "${blk##*/}"
     done
+    # Virtual loop drive for testing or when physical USB port is occupied
+    for blk in /sys/block/loop*; do
+        [ -e "$blk/loop/backing_file" ] || continue
+        echo "${blk##*/}"
+    done
 }
 
 # --- wait for the first partition; fall back to a whole-disk filesystem ------
 find_partition() {
     fpdev=$1
+    case "$fpdev" in
+      loop*)
+        if blkid "/dev/$fpdev" >/dev/null 2>&1; then echo "$fpdev"; return 0; fi
+        ;;
+    esac
     i=0
     while [ "$i" -lt 40 ]; do                 # up to 4 s (0.1 s steps)
         [ -b "/dev/${fpdev}1" ] && { echo "${fpdev}1"; return 0; }
@@ -165,6 +175,11 @@ find_partition() {
 probe_export() {
     pdev=$1
     ppart=$(find_partition "$pdev") || return 1
+    # Check if already mounted somewhere on the host
+    pexisting=$(awk -v d="/dev/$ppart" '$1 == d { print $2; exit }' /proc/mounts 2>/dev/null)
+    if [ -n "$pexisting" ] && [ -e "$pexisting/PIONEER/rekordbox/export.pdb" ]; then
+        return 0
+    fi
     mkdir -p "$PROBE_MNT" 2>/dev/null || return 1
     pfstype=$(blkid -s TYPE -o value "/dev/$ppart" 2>/dev/null)
     [ -n "$pfstype" ] || pfstype=vfat
@@ -360,6 +375,14 @@ attach() {
     # wanted stick over $amnt would leave $achmnt still showing the old contents —
     # and a leftover mount from a previous run is exactly how the same stick ended
     # up in both slots on the first live run (2026-10-07).
+    # Release any foreign mount points holding this partition (e.g. desktop automounters)
+    for fm in $(awk -v d="/dev/$apart" '$1 == d { print $2 }' /proc/mounts 2>/dev/null); do
+        if [ "$fm" != "$amnt" ] && [ "$fm" != "$achmnt" ]; then
+            log "attach: releasing foreign mount $fm for /dev/$apart"
+            umount -l "$fm" 2>/dev/null || true
+        fi
+    done
+
     acur=$(mount_src "$amnt")
     case "$acur" in
       "") ;;

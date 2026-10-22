@@ -108,17 +108,12 @@ rb_require_chroot() {
 pids_matching() {
     _pat=$1
     _excl=${2:-}
-    for _c in /proc/[0-9]*/cmdline; do
-        [ -r "$_c" ] || continue
+    for _c in $(grep -l -z -F "$_pat" /proc/[0-9]*/cmdline 2>/dev/null); do
         _pid=${_c#/proc/}
         _pid=${_pid%/cmdline}
         [ "$_pid" = "$$" ] && continue
-        # NULs become spaces so one case pattern can match the whole argv.
-        # Failure here means the process exited mid-scan; that is not an error.
-        _cmd=$(tr '\0' ' ' < "$_c" 2>/dev/null) || continue
-        case "$_cmd" in *"$_pat"*) ;; *) continue ;; esac
         if [ -n "$_excl" ]; then
-            case "$_cmd" in *"$_excl"*) continue ;; esac
+            grep -q -z -F "$_excl" "$_c" 2>/dev/null && continue
         fi
         echo "$_pid"
     done

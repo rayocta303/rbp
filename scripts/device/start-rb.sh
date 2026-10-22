@@ -470,6 +470,13 @@ sh "$HERE/display-watch.sh" start 2>/dev/null
 echo "start-rb: display-watch started"
 rb_bootmsg "display-watch started"
 
+# --- 10b. auto mount USB test media if configured ---------------------------
+if [ "${RB_USB_TEST_AUTO:-0}" = 1 ] && [ -x "$HERE/usb-test-mount.sh" ]; then
+    echo "start-rb: auto-mounting USB test media..."
+    rb_bootmsg "auto-mounting USB test media"
+    sh "$HERE/usb-test-mount.sh" start >/dev/null 2>&1 &
+fi
+
 # --- 11. cleanup, on every exit path ----------------------------------------
 #
 # Defined before the wait loop and installed as a signal handler, because
@@ -480,6 +487,7 @@ rb_bootmsg "display-watch started"
 # This also makes docs/11's existing claim ("Ctrl-C the launcher") true, which it
 # has not been: a Ctrl-C killed the shell and orphaned rbp the same way.
 cleanup() {
+    [ -x "$HERE/usb-test-mount.sh" ] && sh "$HERE/usb-test-mount.sh" stop 2>/dev/null
     sh "$HERE/usb-watch.sh" stop 2>/dev/null
     # Same trap, same reason as the USB watcher above, and it is what makes
     # "no watcher is left behind" true — which is the thing S10.6 checks. When

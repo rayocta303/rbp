@@ -92,7 +92,7 @@ static int dump_started;
  * turn `MIDI_MAP=kbd` into a typo warning and a silent fall back to the FLX4,
  * which is the opposite of what an operator writing it wants. */
 static const struct ctrl_map *const midi_maps[] = {
-     &map_flx4, &map_jp21, &map_kbd, &map_none,
+     &map_flx4, &map_flx6, &map_jp21, &map_kbd, &map_none,
 };
 static const struct ctrl_map *const evdev_maps[] = {
      &map_kbd, &map_none,

@@ -1,0 +1,15 @@
+[Unit]
+Description=rblive4 - Auto Mount Virtual Rekordbox USB Test Media
+Documentation=https://github.com/salesforcedoc/rbpi4b
+After=rblive4.service
+Wants=rblive4.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/rblive4/usb-test-mount.sh start
+ExecStop=/opt/rblive4/usb-test-mount.sh stop
+TimeoutSec=30
+
+[Install]
+WantedBy=multi-user.target

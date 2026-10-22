@@ -51,8 +51,8 @@
  * count), and the previous 96 silently swallowed its last three -- a mixer note
  * and both Beat FX notes. The next obvious change to that map is binding the
  * pads' +SHIFT layer, which is another 64 rows; 192 covers it. */
-#define CTRL_NKEYS 192
-#define CTRL_NABS  40
+#define CTRL_NKEYS 384
+#define CTRL_NABS  64
 
 /* Button: a note on a receive channel that means an rbp keycode. `key` 0 marks
  * a control rbp has no code for, which is logged and otherwise ignored. `repeat`
@@ -347,6 +347,7 @@ extern const struct ctrl_map map_kbd;
  * published DDJ-FLX4 MIDI message list and are unverified until a dump from the
  * unit confirms them -- see the provenance block in map_flx4.c and docs/15. */
 extern const struct ctrl_map map_flx4;
+extern const struct ctrl_map map_flx6;
 
 /* The selected MIDI surface's LED table, or NULL if it has none to drive. Defined
  * in ctrlshim.c because that is the only file that knows the selection, and asked

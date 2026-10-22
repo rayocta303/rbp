@@ -468,7 +468,9 @@ static int find_panel(char *path_out, size_t path_len,
             name[0] = '\0';
         name[sizeof name - 1] = '\0';
 
-        if (strstr(name, VNC_INPUT_NAME_MATCH) != NULL) {
+        if (strstr(name, VNC_INPUT_NAME_MATCH) != NULL ||
+            strstr(name, "USB2IIC_CTP_CONTROL") != NULL ||
+            strstr(name, "CTouch") != NULL) {
             snprintf(path_out, path_len, "%s", path);
             snprintf(name_out, name_len, "%s", name);
             return fd;

@@ -72,7 +72,7 @@ SCHEMA = [
          restart="player", risk="low", label="Pointer type",
          help="How the pointer is found. 'auto' prefers an absolute touch panel and falls "
               "back to a relative mouse; 'rel' pins a mouse and will filter a touch panel out."),
-    dict(key="RB_MIDI_MAP", group="basic", type=E, choices=["", "flx4", "jp21", "kbd", "none"],
+    dict(key="RB_MIDI_MAP", group="basic", type=E, choices=["", "flx4", "flx6", "jp21", "kbd", "none"],
          restart="player", risk="low", label="MIDI controller",
          help="Which surface the controls shim selects. Empty means the built-in default."),
     dict(key="RB_AUDIO_DEV", group="basic", type=S, pattern=r"^[A-Za-z0-9._:+,=-]{0,64}$",

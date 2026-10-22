@@ -67,7 +67,7 @@ static int checks, failures;
 /* The maps this build has, as ctrlshim.c's midi_maps[]/evdev_maps[] spell them.
  * A COPY, and the header above says which direction that leaves unguarded. */
 static const char *const maps_the_build_has[] = {
-    "flx4", "jp21", "kbd", "none",
+    "flx4", "flx6", "jp21", "kbd", "none",
 };
 
 static int is_a_map(const char *name)
@@ -212,6 +212,31 @@ static void test_the_measured_row(void)
      * shim that selects a map nobody can ask for by controller name. */
     CHECK(strcmp(f->id, f->map_name) == 0,
           "the FLX4's id ('%s') and map_name ('%s') must not drift apart",
+          f->id, f->map_name);
+}
+
+static void test_the_flx6_row(void)
+{
+    const struct controller *f = controllers_find("flx6");
+
+    CHECK(f != NULL, "the FLX6 must have a row");
+    if (!f)
+        return;
+
+    CHECK(f->usb && strcmp(f->usb, "2b73:0038") == 0,
+          "the FLX6's USB id must be 2b73:0038, not '%s'",
+          f->usb ? f->usb : "(null)");
+    CHECK(f->alsa_hint && strcmp(f->alsa_hint, "FLX6") == 0,
+          "the FLX6's port-name hint must be FLX6, not '%s'",
+          f->alsa_hint ? f->alsa_hint : "(null)");
+    CHECK(f->card_id && strcmp(f->card_id, "DDJFLX6") == 0,
+          "the FLX6's card id must be DDJFLX6, not '%s'",
+          f->card_id ? f->card_id : "(null)");
+    CHECK(f->map_name && strcmp(f->map_name, "flx6") == 0,
+          "the FLX6's map must be flx6, not '%s'",
+          f->map_name ? f->map_name : "(null)");
+    CHECK(strcmp(f->id, f->map_name) == 0,
+          "the FLX6's id ('%s') and map_name ('%s') must not drift apart",
           f->id, f->map_name);
 }
 
@@ -559,6 +584,7 @@ static void test_the_walk_refuses(void)
 int main(void)
 {    test_shape();
     test_the_measured_row();
+    test_the_flx6_row();
     test_the_unknowns_stay_unknown();
     test_find_and_hint();
     test_default();

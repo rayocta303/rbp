@@ -212,6 +212,7 @@ struct vnc_capture {
     void *fb;                 /* the mmap of /dev/fb0 */
     size_t fbsize;
     int w, h, stride_px;
+    int bpp;
 
     int drmfd;
     struct vnc_fb fbs[VNC_MAX_FBS];
@@ -657,15 +658,16 @@ struct vnc_capture *vnc_capture_open(char *err, size_t errlen)
         if (err) snprintf(err, errlen, "FBIOGET_*SCREENINFO: %s", strerror(errno));
         goto fail;
     }
-    if (var.bits_per_pixel != 16) {
-        if (err) snprintf(err, errlen, "/dev/fb0 is %u bpp, not the 16 this expects",
+    if (var.bits_per_pixel != 16 && var.bits_per_pixel != 32) {
+        if (err) snprintf(err, errlen, "/dev/fb0 is %u bpp, not 16 or 32",
                           var.bits_per_pixel);
         goto fail;
     }
 
     c->w = (int)var.xres;
     c->h = (int)var.yres;
-    c->stride_px = (int)(fix.line_length / 2);
+    c->bpp = (int)var.bits_per_pixel;
+    c->stride_px = (int)(fix.line_length / (var.bits_per_pixel / 8));
     n = (size_t)fix.line_length * var.yres;
     c->fb = mmap(NULL, n, PROT_READ, MAP_SHARED, c->fbfd, 0);
     if (c->fb == MAP_FAILED) {
@@ -675,42 +677,29 @@ struct vnc_capture *vnc_capture_open(char *err, size_t errlen)
     }
     c->fbsize = n;
 
+    /* Try card1, then card0 for DRM overlay planes; failure is non-fatal */
     c->drmfd = open("/dev/dri/card1", O_RDWR | O_CLOEXEC);
-    if (c->drmfd < 0) {
-        if (err) snprintf(err, errlen, "open /dev/dri/card1: %s", strerror(errno));
-        goto fail;
-    }
+    if (c->drmfd < 0)
+        c->drmfd = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
 
-    /* GIVE BACK WHAT THE OPEN JUST TOOK. The kernel grants DRM master to the first
-     * client to open the primary node, whether or not it ever asked -- and everything
-     * this process does with the node is a query, so holding it only takes the display
-     * away from the shims that need it (see the header). Both failures are expected and
-     * neither is a problem: EINVAL if we were not master after all, EACCES if another
-     * client has it legitimately. Only success is worth saying out loud, because it is
-     * the case that would otherwise be silent and would cost someone a boot. */
-    if (ioctl(c->drmfd, DRM_IOCTL_DROP_MASTER, NULL) == 0)
-        fprintf(stderr, "vncserve: was granted DRM master by opening /dev/dri/card1 "
-                        "first -- dropped it, the display is not ours\n");
+    if (c->drmfd >= 0) {
+        if (ioctl(c->drmfd, DRM_IOCTL_DROP_MASTER, NULL) == 0)
+            fprintf(stderr, "vncserve: was granted DRM master -- dropped it\n");
 
-    /* Without this the kernel lists only the overlay planes -- this board returned 48
-     * of card1's 60 objects with every primary and cursor simply absent -- so the plane
-     * rbp's deck is on would not even be found. It is a property of the FILE. */
-    memset(&cap, 0, sizeof cap);
-    cap.capability = DRM_CLIENT_CAP_UNIVERSAL_PLANES;
-    cap.value      = 1;
-    if (ioctl(c->drmfd, DRM_IOCTL_SET_CLIENT_CAP, &cap) < 0) {
-        if (err) snprintf(err, errlen, "SET_CLIENT_CAP UNIVERSAL_PLANES: %s", strerror(errno));
-        goto fail;
-    }
-
-    /* And this, or every plane appears to sit at (0,0) -- see the note on
-     * DRM_CLIENT_CAP_ATOMIC in this file's uapi block. A failure is not fatal: the
-     * planes still composite, at the wrong place, and the status line says so. */
-    memset(&cap, 0, sizeof cap);
-    cap.capability = DRM_CLIENT_CAP_ATOMIC;
-    cap.value      = 1;
-    if (ioctl(c->drmfd, DRM_IOCTL_SET_CLIENT_CAP, &cap) < 0) {
-        c->no_atomic = 1;
+        memset(&cap, 0, sizeof cap);
+        cap.capability = DRM_CLIENT_CAP_UNIVERSAL_PLANES;
+        cap.value      = 1;
+        if (ioctl(c->drmfd, DRM_IOCTL_SET_CLIENT_CAP, &cap) < 0) {
+            close(c->drmfd);
+            c->drmfd = -1;
+        } else {
+            memset(&cap, 0, sizeof cap);
+            cap.capability = DRM_CLIENT_CAP_ATOMIC;
+            cap.value      = 1;
+            if (ioctl(c->drmfd, DRM_IOCTL_SET_CLIENT_CAP, &cap) < 0) {
+                c->no_atomic = 1;
+            }
+        }
     }
 
     snprintf(c->status, sizeof c->status, "%dx%d RGB565, no frame yet", c->w, c->h);
@@ -837,37 +826,47 @@ void vnc_capture_describe(struct vnc_capture *c)
 int vnc_capture_frame(struct vnc_capture *c, uint16_t *dst)
 {
     int row, i;
-    const uint16_t *fb = (const uint16_t *)c->fb;
 
-    /* 1. The deck, straight out of fb0's mapping. One memcpy per row when the pitch
-     *    is exactly the width (it is: 2560 B for 1280 px), which the branch below
-     *    collapses to a single call. */
-    if (c->stride_px == c->w) {
-        memcpy(dst, fb, (size_t)c->w * (size_t)c->h * sizeof *dst);
+    /* 1. The deck from fb0's mapping. Convert to RGB565 if fb0 is 32 bpp */
+    if (c->bpp == 32) {
+        int col;
+        const uint32_t *fb32 = (const uint32_t *)c->fb;
+        for (row = 0; row < c->h; row++) {
+            const uint32_t *s = fb32 + (size_t)row * c->stride_px;
+            uint16_t       *d = dst  + (size_t)row * c->w;
+            for (col = 0; col < c->w; col++) {
+                uint32_t px = s[col];
+                d[col] = (uint16_t)(((px >> 8) & 0xf800) |
+                                    ((px >> 5) & 0x07e0) |
+                                    ((px >> 3) & 0x001f));
+            }
+        }
     } else {
-        for (row = 0; row < c->h; row++)
-            memcpy(dst + (size_t)row * c->w, fb + (size_t)row * c->stride_px,
-                   (size_t)c->w * sizeof *dst);
+        const uint16_t *fb = (const uint16_t *)c->fb;
+        if (c->stride_px == c->w) {
+            memcpy(dst, fb, (size_t)c->w * (size_t)c->h * sizeof *dst);
+        } else {
+            for (row = 0; row < c->h; row++)
+                memcpy(dst + (size_t)row * c->w, fb + (size_t)row * c->stride_px,
+                       (size_t)c->w * sizeof *dst);
+        }
     }
 
-    /* 2. Every active overlay plane, over the top. Geometry first: a drawer's
-     *    position changes as it slides, so it is read every frame. */
+    /* 2. Every active overlay plane, over the top (if DRM is open). */
     c->nplanes = 0;
     c->failed_planes = 0;
     c->bad_format = 0;
     c->no_geometry = 0;
 
-    /* Nothing mapped outlives the frame that mapped it -- not because the pixels go
-     * stale, but because the framebuffer ID they were looked up under is handed out
-     * again to a different buffer the moment rbp closes a drawer. See get_fb(). */
-    release_all_fbs(c);
+    if (c->drmfd >= 0) {
+        release_all_fbs(c);
+        refresh_plane_list(c);
+        refresh_geometry(c);
+        for (i = 0; i < c->nplane_ids; i++)
+            add_plane(c, c->plane_ids[i]);
 
-    refresh_plane_list(c);
-    refresh_geometry(c);
-    for (i = 0; i < c->nplane_ids; i++)
-        add_plane(c, c->plane_ids[i]);
-
-    vnc_compose_planes(dst, c->w, c->h, c->planes, c->nplanes);
+        vnc_compose_planes(dst, c->w, c->h, c->planes, c->nplanes);
+    }
 
     snprintf(c->status, sizeof c->status,
              "%dx%d RGB565; %d plane(s)%s%s%s%s",

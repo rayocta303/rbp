@@ -355,6 +355,10 @@
 #define K_TRREV      0x4215    /* XDJ TRACK SEARCH < (track skip prev) */
 #define K_SRFWD      0x411f    /* XDJ SEARCH > (beat jump next) */
 #define K_SRREV      0x4120    /* XDJ SEARCH < (beat jump prev) */
+#define K_CALL_NEXT  0x4322    /* XDJ CUE/LOOP CALL > (next memory cue/loop) */
+#define K_CALL_PREV  0x4323    /* XDJ CUE/LOOP CALL < (prev memory cue/loop) */
+#define K_MEM_CUE    0x4125    /* XDJ CUE/LOOP MEMORY */
+#define K_MEM_DEL    0x4124    /* XDJ CUE/LOOP DELETE */
 #define K_PAD1       0x4117
 #define K_LOOPIN     0x410c
 #define K_LOOPOUT    0x410d
@@ -437,6 +441,9 @@
  */
 #define BFX_TYPE_POSITIONS 14
 #define ADDR_GET_BFX_TYPE  0x4d514
+#define ADDR_UIGETMIXBEATFXON    0x000fe46cUL
+#define ADDR_UIGETMIXBEATFXNUMER 0x000fe60cUL
+#define ADDR_UIGETMIXBEATFXDENOM 0x000fe638UL
 
 /* The map above, inverted: internal type -> switch position, -1 for a type no
  * position reaches (0 is not one of them, so the first entry is never a hit).
@@ -761,6 +768,8 @@ static const signed char bfx_type_to_pos[15] = {
 #define PE_ISAUTOBEATLOOP  0x5ef74
 #define PE_ISLOOPINADJ     0x5f000
 #define PE_ISLOOPOUTADJ    0x5f02c
+#define PE_GETPLAYINGPOS   0x5d950
+#define PE_HASARRIVEDATEND 0x5dc28
 
 /* rbp LedStat ids we have identified (channels 1/2 = deck 1/2):
  *   49 = deck PLAY  (state 2 while paused  -> panel must blink)

@@ -246,15 +246,19 @@ static int paint_plane(int deck, int ring)
 
 static int setup_once(int deck)
 {
+    static int failed[2];
     const int w = DB_DECK1_X1 - DB_DECK1_X0 + 1;
     const int h = DB_Y1 - DB_Y0 + 1;
 
+    if (failed[deck])
+        return -1;
     if (usable[deck])
         return 0;
     drm_band_want_rank(DRM_RANK_RING);
     if (drm_band_setup(&band[deck], w, h, 16) != 0) {
         /* Said once per deck and then remembered: a machine that cannot have a third plane is a
          * machine with no ring, and that must not cost the player anything. */
+        failed[deck] = 1;
         pointsrc_log("badge: deck%d has no overlay plane -- no play ring (the badge still works)",
                      deck + 1);
         return -1;

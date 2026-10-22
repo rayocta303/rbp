@@ -97,11 +97,15 @@ static struct {
     int ntaken;
     /* ...and THE RANK the next setup asks for -- see drm_band_want_rank(). */
     unsigned int want_rank;
-} g_dev = { -1, 0, { 0 }, 0, 0 };
+    int failed;
+} g_dev = { -1, 0, { 0 }, 0, 0, 0 };
 
 static int dev_acquire(void)
 {
     struct drm_set_client_cap cap;
+
+    if (g_dev.failed)
+        return -1;
 
     if (g_dev.refs > 0) {           /* the card is already ours: master included */
         g_dev.refs++;
@@ -110,6 +114,7 @@ static int dev_acquire(void)
 
     g_dev.fd = real_open(DRM_BAND_CARD, O_RDWR | O_CLOEXEC, 0);
     if (g_dev.fd < 0) {
+        g_dev.failed = 1;
         pointsrc_log("menu plane: open %s: %s -- the band stays on /dev/fb0",
                      DRM_BAND_CARD, strerror(errno));
         return -1;
@@ -124,6 +129,7 @@ static int dev_acquire(void)
     cap.capability = DRM_CLIENT_CAP_UNIVERSAL_PLANES;
     cap.value      = 1;
     if (real_ioctl(g_dev.fd, DRM_IOCTL_SET_CLIENT_CAP, &cap) < 0) {
+        g_dev.failed = 1;
         pointsrc_log("menu plane: SET_CLIENT_CAP UNIVERSAL_PLANES: %s -- the band"
                      " stays on /dev/fb0", strerror(errno));
         real_close(g_dev.fd);
@@ -138,6 +144,7 @@ static int dev_acquire(void)
      * DirectFB set up -- work/drmplane held it for minutes with rbp redrawing
      * underneath and the primary stayed at fb 722 throughout. */
     if (real_ioctl(g_dev.fd, DRM_IOCTL_SET_MASTER, NULL) < 0) {
+        g_dev.failed = 1;
         pointsrc_log("menu plane: SET_MASTER on %s: %s -- something else holds"
                      " the display; the band stays on /dev/fb0",
                      DRM_BAND_CARD, strerror(errno));

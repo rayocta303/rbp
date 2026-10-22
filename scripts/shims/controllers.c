@@ -66,6 +66,17 @@ static const struct controller table[] = {
           0, NULL,                                  /* a surface, not a mixer */
      },
      {
+          "flx6",
+          "DDJ-FLX6",
+          "2b73:0038",
+          "FLX6",
+          "DDJFLX6",
+          "flx6",
+          NULL, 0,                                  /* no SysEx of its own */
+          sysex_flx4_keepalive, sizeof sysex_flx4_keepalive, 200,
+          0, NULL,                                  /* a surface, not a mixer */
+     },
+     {
           "jp21",
           "SC Live 4 / Prime GO",
           NULL,                                     /* USB id not recorded here */

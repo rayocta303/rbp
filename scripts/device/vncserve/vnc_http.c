@@ -19,6 +19,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <math.h>
 
 #include "vnc_http.h"
 #include "vnc_net.h"
@@ -192,7 +193,7 @@ static const char VNC_HTTP_CSS[] =
     "body.only .chrome{display:none}"
     "body.only .shot{flex:none;width:min(1280px,100vw,160vh);"
     "height:min(800px,62.5vw,100vh);aspect-ratio:auto;border:0;border-radius:0;"
-    "cursor:default}";
+    "cursor:pointer}";
 
 static void page_html(struct vnc_http *h, struct sbuf *b)
 {
@@ -208,7 +209,7 @@ static void page_html(struct vnc_http *h, struct sbuf *b)
                "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
                "<style>");
     sb_adds(b, VNC_HTTP_CSS);
-    sb_adds(b, "</style></head><body class=\"only\">");
+    sb_adds(b, "</style></head><body>");
 
     /* Everything that is a word goes inside a `.chrome` block, and the picture sits
      * between the two of them, so one tap on it can take the whole page down to a bare
@@ -325,6 +326,35 @@ static void page_html(struct vnc_http *h, struct sbuf *b)
                        "raises the eject chooser. Nothing on this page ejects the "
                        "operator's media &mdash; that is a three-second hold, and it is a "
                        "press for a person to make.</p>");
+    }
+
+    sb_adds(b, "<h1 style=\"font-size:16px\">Jogwheel Sensitivity</h1>");
+    {
+        float jog_mult = 1.0f;
+        FILE *fj = fopen("/run/rblive4/jog_speed", "r");
+        if (fj) {
+            float v = 1.0f;
+            if (fscanf(fj, "%f", &v) == 1 && v >= 0.05f && v <= 20.0f)
+                jog_mult = v;
+            fclose(fj);
+        }
+        sb_addf(b, "<p class=\"lead\">Current Multiplier: <b id=\"jog_val\" style=\"color:#4caf50\">%.2fx</b></p>", jog_mult);
+        sb_adds(b, "<div style=\"display:flex;align-items:center;gap:15px;margin:0 0 15px\">");
+        sb_addf(b, "<input type=\"range\" id=\"jog_slider\" min=\"0.10\" max=\"3.00\" step=\"0.05\" value=\"%.2f\" "
+                   "style=\"flex:1;max-width:380px;height:8px;accent-color:#4caf50;cursor:pointer\" "
+                   "oninput=\"document.getElementById('jog_val').innerText=parseFloat(this.value).toFixed(2)+'x'\" "
+                   "onchange=\"fetch('/jog?set='+this.value)\">", jog_mult);
+        sb_addf(b, "<span style=\"color:#9aa0a6;font-size:13px\">0.1x &mdash; 3.0x</span>");
+        sb_adds(b, "</div>");
+        sb_adds(b, "<form method=\"get\" action=\"/jog\" style=\"margin-bottom:8px\">");
+        sb_addf(b, "<button name=\"set\" value=\"0.10\"%s>0.1x (Slowest)</button>", fabsf(jog_mult - 0.10f) < 0.04f ? " class=\"on\"" : "");
+        sb_addf(b, "<button name=\"set\" value=\"0.50\"%s>0.5x (Slow)</button>", fabsf(jog_mult - 0.5f) < 0.05f ? " class=\"on\"" : "");
+        sb_addf(b, "<button name=\"set\" value=\"0.75\"%s>0.75x</button>", fabsf(jog_mult - 0.75f) < 0.05f ? " class=\"on\"" : "");
+        sb_addf(b, "<button name=\"set\" value=\"1.00\"%s>1.0x (Normal)</button>", fabsf(jog_mult - 1.0f) < 0.05f ? " class=\"on\"" : "");
+        sb_addf(b, "<button name=\"set\" value=\"1.50\"%s>1.5x (Fast)</button>", fabsf(jog_mult - 1.5f) < 0.05f ? " class=\"on\"" : "");
+        sb_addf(b, "<button name=\"set\" value=\"2.00\"%s>2.0x</button>", fabsf(jog_mult - 2.0f) < 0.05f ? " class=\"on\"" : "");
+        sb_adds(b, "</form>");
+        sb_adds(b, "<p class=\"note\">Adjust jogwheel sensitivity smoothly with the slider or quick preset buttons without restarting.</p>");
     }
 
     sb_adds(b, "<h1 style=\"font-size:16px\">Preview</h1>");
@@ -522,6 +552,24 @@ static void route_get(struct vnc_http *h, struct hconn *c, const char *target)
             } else {
                 vlog("http: the page asked for sharing \"%s\", which is neither on nor "
                      "off; leaving it %s", word, vnc_live_name(h->st->live->on));
+            }
+        }
+        reply(c, 303, "See Other", "text/plain; charset=utf-8", "", 0,
+              "Location: /\r\n");
+        return;
+    }
+
+    if (!strncmp(target, "/jog", 4) && (target[4] == '\0' || target[4] == '?')) {
+        char word[32];
+        if (query_set(target, word, sizeof word)) {
+            float mult = (float)atof(word);
+            if (mult >= 0.05f && mult <= 20.0f) {
+                FILE *f = fopen("/run/rblive4/jog_speed", "w");
+                if (f) {
+                    fprintf(f, "%.2f\n", mult);
+                    fclose(f);
+                    vlog("http: jog speed multiplier set to %.2f", mult);
+                }
             }
         }
         reply(c, 303, "See Other", "text/plain; charset=utf-8", "", 0,

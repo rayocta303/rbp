@@ -69,6 +69,75 @@ int rbp_beatfx_type(void)
      return ((int (*)(void *))ADDR_GET_BFX_TYPE)(NULL);
 }
 
+int rbp_beatfx_numer(void)
+{
+     if (!is_rbp_process())
+          return -1;
+     return ((int (*)(void))ADDR_UIGETMIXBEATFXNUMER)();
+}
+
+int rbp_beatfx_denom(void)
+{
+     if (!is_rbp_process())
+          return -1;
+     return ((int (*)(void))ADDR_UIGETMIXBEATFXDENOM)();
+}
+
+int rbp_beatfx_on(void)
+{
+     if (!is_rbp_process())
+          return -1;
+     return ((int (*)(void))ADDR_UIGETMIXBEATFXON)();
+}
+
+int rbp_is_looping(int deck)
+{
+     void *pe = *(void **)PLAYENGINE_GLOBAL;
+     if (!pe)
+          return 0;
+     return ((int (*)(void *, int))PE_ISLOOPING)(pe, deck) != 0;
+}
+
+int rbp_is_canreloop(int deck)
+{
+     void *pe = *(void **)PLAYENGINE_GLOBAL;
+     if (!pe)
+          return 0;
+     return ((int (*)(void *, int))PE_ISCANRELOOP)(pe, deck) != 0;
+}
+
+long rbp_get_playing_pos(int deck)
+{
+     void *pe = *(void **)PLAYENGINE_GLOBAL;
+     if (!pe || deck < 0 || deck > 1)
+          return 0;
+     return ((long (*)(void *, int))PE_GETPLAYINGPOS)(pe, deck);
+}
+
+int rbp_has_arrived_at_end(int deck)
+{
+     void *pe = *(void **)PLAYENGINE_GLOBAL;
+     if (!pe || deck < 0 || deck > 1)
+          return 0;
+     return ((int (*)(void *, int))PE_HASARRIVEDATEND)(pe, deck) != 0;
+}
+
+int rbp_is_playing(int deck)
+{
+     void *pe = *(void **)PLAYENGINE_GLOBAL;
+     if (!pe || deck < 0 || deck > 1)
+          return 0;
+     return ((int (*)(void *, int))PE_ISPLAYING)(pe, deck) != 0;
+}
+
+int rbp_is_loaded(int deck)
+{
+     void *pe = *(void **)PLAYENGINE_GLOBAL;
+     if (!pe || deck < 0 || deck > 1)
+          return 0;
+     return ((int (*)(void *, int))PE_ISLOADED)(pe, deck) != 0;
+}
+
 void *mixer_engine(void)
 {
      return *(void **)ME_SINGLETON;
