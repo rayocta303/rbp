@@ -33,7 +33,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include <sys/stat.h>
 #include <sound/asequencer.h>
 
 #include "shimutil.h"
@@ -257,7 +256,6 @@ static void flx6_select_cfx_slot(int slot)
 }
 
 static unsigned long long flx6_cfg_last_check = 0;
-static time_t flx6_cfg_last_mtime = 0;
 
 static void flx6_load_fx_config(void)
 {
@@ -269,6 +267,7 @@ static void flx6_load_fx_config(void)
      }
      if (!f) return;
 
+     int changed = 0;
      char line[128];
      while (fgets(line, sizeof line, f)) {
           char *p = line;
@@ -289,24 +288,34 @@ static void flx6_load_fx_config(void)
           if (!strncmp(p, "cfx_slot", 8)) {
                int s = p[8] - '1';
                if (s >= 0 && s < 4) {
-                    flx6_cfx_slots[s] = flx6_cfx_from_name(val);
+                    int k = flx6_cfx_from_name(val);
+                    if (flx6_cfx_slots[s] != k) {
+                         flx6_cfx_slots[s] = k;
+                         changed = 1;
+                    }
                }
           } else if (!strncmp(p, "bfx_slot", 8)) {
                int s = p[8] - '1';
                if (s >= 0 && s < 6) {
                     if (strstr(p, "_type")) {
                          int t = atoi(val);
-                         if (t >= 0 && t < 14) flx6_slots[s].fx_type = t;
+                         if (t >= 0 && t < 14 && flx6_slots[s].fx_type != t) {
+                              flx6_slots[s].fx_type = t;
+                              changed = 1;
+                         }
                     } else if (strstr(p, "_ch")) {
                          int c = atoi(val);
-                         if (c == 0 || c == 1 || c == BFX_CH_MASTER)
+                         if ((c == 0 || c == 1 || c == BFX_CH_MASTER) && flx6_slots[s].channel != c) {
                               flx6_slots[s].channel = c;
+                              changed = 1;
+                         }
                     }
                }
           }
      }
      fclose(f);
-     klog("knobshim2: FLX6 FX configuration loaded from %s\n", path);
+     if (changed)
+          klog("knobshim2: FLX6 FX configuration updated from %s\n", path);
 }
 
 static void flx6_check_fx_config(void)
@@ -315,17 +324,7 @@ static void flx6_check_fx_config(void)
      if (now - flx6_cfg_last_check < 500) return;
      flx6_cfg_last_check = now;
 
-     struct stat st;
-     const char *path = "/run/rblive4/flx6_fx.conf";
-     if (stat(path, &st) != 0) {
-          path = "/opt/rblive4/flx6_fx.conf";
-          if (stat(path, &st) != 0) return;
-     }
-
-     if (st.st_mtime != flx6_cfg_last_mtime) {
-          flx6_cfg_last_mtime = st.st_mtime;
-          flx6_load_fx_config();
-     }
+     flx6_load_fx_config();
 }
 
 static void flx6_log_only(int ch, int note)
