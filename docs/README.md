@@ -27,6 +27,10 @@ unit up; it is the target document and links out to the rest.
 | 17 | [rx3-flx4-comparison](17-rx3-flx4-comparison.md) | the sibling port read against this one: `doctor`, the run-time object scan, the firmware's own LED period — and where the sibling is behind. Their read-only USB overlay was read and **discarded**, not a candidate here |
 | 18 | [prodjlink](18-prodjlink.md) | `netshim.so`: rbp's Pro DJ Link stack over `wlan0`, the twelve functions hardcoded to `eth0`, the three interposed calls, the whitelist, and the load-order contract with `fbshim` — **built and host-verified, not deployed** |
 | 19 | [vnc](19-vnc.md) | `vncserve`: rbp's whole screen over VNC, hand-rolled (only libc) because `libvncserver` cannot be handed a JPEG the hardware encoder already made — the `raw` ↔ `hwjpeg` switch, its control page, the macOS 3.3 handshake, and the measured 44× bandwidth win |
+| 20 | [config-page](20-config-page.md) | `confscreen.py`: the standalone status and configuration web UI served on LAN HTTP port 5904 |
+| 21 | [dfd-dataflow](21-dfd-dataflow.md) ([ID](21-dfd-dataflow-id.md)) | complete Data Flow Diagram (DFD): Level 0 Context, Level 1 Decomposition, Level 2 Detailed Workflows, and Data Dictionary |
+| 22 | [rbp-data-dictionary](22-rbp-data-dictionary.md) | complete technical Data Dictionary for `rbp`: ARM32 registers, ABI functions, struct layouts, global singletons, keycodes, and I/O specifications |
+| 23 | [usb-hid-pc-plan](23-usb-hid-pc-plan.md) | implementation roadmap for enabling USB-B HID/MIDI cable connection to Rekordbox PC (Hardware Unlock, Soundcard, Bidirectional HID) |
 
 There is no document 14: the port plan numbers the FLX4 runbook 15 and defines
 nothing at 14, so the gap is left rather than renumbered.

@@ -410,9 +410,10 @@ static void flx6_ensure_crossfader_assign(void)
      if (!me) return;
      me_set_crossfader_assign(0, 1); /* Deck 1 (input 0) -> Crossfader A */
      me_set_crossfader_assign(1, 2); /* Deck 2 (input 1) -> Crossfader B */
-     me_set_crossfader_curve(1);     /* Standard linear curve */
+     /* Do not overwrite crossfader curve; let Rekordbox / rbp system profile govern it */
      assigned = 1;
-     klog("knobshim2: FLX6 crossfader assigned Ch1->A, Ch2->B\n");
+     klog("knobshim2: FLX6 crossfader assigned Ch1->A, Ch2->B (curve=%d)\n",
+          me_get_crossfader_curve());
 }
 
 static float flx6_get_jog_multiplier(void)
@@ -525,12 +526,14 @@ static void flx6_cc_abs(int ch, int cc, int val)
           if (key == K_FADER && sch >= 1 && sch <= 2) {
                g_fader[sch] = v;
                g_fader_seen[sch] = 1;
+               me_set_channel_fader(sch - 1, fval);
           } else if (key == K_XFADER) {
                flx6_ensure_crossfader_assign();
                me_set_crossfader(fval);
                send_rx_key_f(key, OP_VALUE, 0, v, fval);
                if (verbose)
-                    klog("knobshim2: crossfader val=%d f=%.3f\n", v, (double)fval);
+                    klog("knobshim2: crossfader val=%d f=%.3f (curve=%d)\n",
+                         v, (double)fval, me_get_crossfader_curve());
                return;
           } else if (key == K_HPMIX) {
                g_cue_mix = fval;

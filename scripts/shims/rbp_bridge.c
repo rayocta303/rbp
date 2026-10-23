@@ -235,6 +235,14 @@ void me_set_crossfader(float f)
      ((void (*)(void *, float))ME_SET_CROSSFADER)(engine, f);
 }
 
+float me_get_crossfader(void)
+{
+     void *engine = mixer_engine();
+     if (!engine)
+          return 0.0f;
+     return ((float (*)(void *))ME_GET_CROSSFADER)(engine);
+}
+
 void me_set_crossfader_assign(int input, int assign)
 {
      void *engine = mixer_engine();
@@ -243,12 +251,60 @@ void me_set_crossfader_assign(int input, int assign)
      ((void (*)(void *, int, int))ME_SET_CROSSFADER_ASSIGN)(engine, input, assign);
 }
 
+int me_get_crossfader_assign(int input)
+{
+     void *engine = mixer_engine();
+     if (!engine)
+          return -1;
+     return ((int (*)(void *, int))ME_GET_CROSSFADER_ASSIGN)(engine, input);
+}
+
 void me_set_crossfader_curve(int curve)
 {
      void *engine = mixer_engine();
      if (!engine)
           return;
      ((void (*)(void *, int))ME_SET_CROSSFADER_CURVE)(engine, curve);
+}
+
+int me_get_crossfader_curve(void)
+{
+     void *engine = mixer_engine();
+     if (!engine)
+          return -1;
+     return ((int (*)(void *))ME_GET_CROSSFADER_CURVE)(engine);
+}
+
+void me_set_channel_fader(int input, float f)
+{
+     void *engine = mixer_engine();
+     if (!engine)
+          return;
+     ((void (*)(void *, int, float))ME_SET_CHANNEL_FADER)(engine, input, f);
+}
+
+float me_get_channel_fader(int input)
+{
+     void *engine = mixer_engine();
+     if (!engine)
+          return 0.0f;
+     return ((float (*)(void *, int))ME_GET_CHANNEL_FADER)(engine, input);
+}
+
+void me_set_channel_fader_curve(int input, int curve)
+{
+     void *engine = mixer_engine();
+     if (!engine)
+          return;
+     ((void (*)(void *, int, int))ME_SET_CHANNEL_FADER_CURVE)(engine, input, curve);
+}
+
+int me_get_channel_fader_curve(int input)
+{
+     void *engine = mixer_engine();
+     if (!engine)
+          return -1;
+     return ((int (*)(void *, int))ME_GET_CHANNEL_FADER_CURVE)(engine, input);
 }
 
 static void *g_plinn[2];              /* ui::PlayerInnards per deck */

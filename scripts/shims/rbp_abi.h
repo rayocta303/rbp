@@ -422,10 +422,17 @@
 #define ME_SET_MASTER_CUE 0x0005766cUL
 #define ME_GET_MASTER_CUE 0x0005767cUL
 
-/* Crossfader control in MixerEngine */
+/* Channel fader and Crossfader control in MixerEngine */
+#define ME_SET_CHANNEL_FADER     0x00056ed4UL   /* MixerEngine::setChannelFader(EnMixerInput, float) */
+#define ME_GET_CHANNEL_FADER     0x00056f18UL   /* MixerEngine::getChannelFader(EnMixerInput) -> float */
+#define ME_SET_CHANNEL_FADER_CURVE 0x00056f4cUL /* MixerEngine::setChannelFaderCurve(EnMixerInput, EnChannelFaderCurve) */
+#define ME_GET_CHANNEL_FADER_CURVE 0x00056f90UL /* MixerEngine::getChannelFaderCurve(EnMixerInput) -> int */
 #define ME_SET_CROSSFADER        0x00056fc4UL   /* MixerEngine::setCrossFader(float) */
+#define ME_GET_CROSSFADER        0x00056fd4UL   /* MixerEngine::getCrossFader() -> float */
 #define ME_SET_CROSSFADER_CURVE  0x00056fe8UL   /* MixerEngine::setCrossFaderCurve(EnCrossFaderCurve) */
+#define ME_GET_CROSSFADER_CURVE  0x00056ff8UL   /* MixerEngine::getCrossFaderCurve() -> int */
 #define ME_SET_CROSSFADER_ASSIGN 0x00057008UL   /* MixerEngine::setCrossFaderAssign(EnMixerInput, EnCrossFaderAssign) */
+#define ME_GET_CROSSFADER_ASSIGN 0x0005704cUL   /* MixerEngine::getCrossFaderAssign(EnMixerInput) -> int */
 
 
 /* ---- DJ FX: channel assign, effect select, time/parameter -----------------
