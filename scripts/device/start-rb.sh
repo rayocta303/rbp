@@ -26,6 +26,14 @@ mkdir -p "$LOG_DIR"
 RBP_LOG="$LOG_DIR/rbp.log"
 EDB_LOG="$LOG_DIR/edb_streamd.log"
 
+# Prepare /run/rblive4 runtime directory and restore persistent settings
+mkdir -p /run/rblive4 2>/dev/null
+for cf in jog_speed flx6_fx.conf vnc.mode vnc.input vnc.live vnc.fps; do
+    if [ -f "$RB_DEPLOY_ROOT/$cf" ] && [ ! -f "/run/rblive4/$cf" ]; then
+        cp -f "$RB_DEPLOY_ROOT/$cf" "/run/rblive4/$cf" 2>/dev/null || true
+    fi
+done
+
 echo "start-rb: deploy root $RB_DEPLOY_ROOT"
 echo "start-rb: chroot      $RB_CHROOT"
 rb_bootmsg "deploy root $RB_DEPLOY_ROOT"
@@ -442,6 +450,7 @@ for i in $(seq 1 30); do
     if [ -n "$RBP" ] && ls -l "/proc/$RBP/fd" 2>/dev/null | grep -q udev_usb1; then
         echo "start-rb: rbp pid $RBP ready (udev_usb1 fd open)"
         rb_bootmsg "rbp pid $RBP ready (udev_usb1 fd open)"
+        echo "$RBP" > /run/rblive4/rbp.pid 2>/dev/null || true
         break
     fi
     sleep 0.5

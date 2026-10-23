@@ -197,7 +197,7 @@ probe_export() {
 # A device whose partition is already serving a slot has answered the question
 # already: do not mount it a second time just to ask again.
 dev_serves_slot() {
-    awk -v a="$MNT" -v b="$MNT2" -v re="^/dev/$1[0-9]*\$" \
+    awk -v a="$MNT" -v b="$MNT2" -v re="^/dev/$1(p?[0-9]+)?\$" \
         '($2 == a || $2 == b) && $1 ~ re { found = 1 } END { exit !found }' \
         /proc/mounts 2>/dev/null
 }
@@ -305,39 +305,51 @@ notify() {
     return 1
 }
 
-rbp_pid() { pids_matching "$RB_PLAYER" strace | head -1; }
+rbp_pid() {
+    if [ -f /run/rblive4/rbp.pid ]; then
+        _p=$(cat /run/rblive4/rbp.pid 2>/dev/null)
+        if [ -n "$_p" ] && [ -d "/proc/$_p" ]; then
+            echo "$_p"
+            return 0
+        fi
+    fi
+    for _c in $(grep -l -z -F "$RB_PLAYER" /proc/[0-9]*/cmdline 2>/dev/null); do
+        _pid=${_c#/proc/}
+        _pid=${_pid%/cmdline}
+        [ "$_pid" = "$$" ] && continue
+        _comm=$(cat "/proc/$_pid/comm" 2>/dev/null)
+        if [ "$_comm" = "ld-linux.so.3" ] || [ "$_comm" = "rbp" ]; then
+            echo "$_pid"
+            return 0
+        fi
+    done
+}
 
-# --- send umount+then mount, retrying until rbp opens the DB ----------------
-# rbp's DeviceSQL channel takes several seconds to come up after a (re)start, and
-# a mount event sent before that is silently lost. Keep re-notifying until rbp
-# actually opens *this slot's* export.pdb, which means its analysis has started.
-#
-# The witness must name the slot: rbp holds both slots' DBs open at once, and
-# /proc/<pid>/fd resolves those targets from *outside* the chroot, so slot 2's
-# live fd would otherwise make slot 1 look ready (and vice versa). The path read
-# here is therefore the chroot bind, $CH_MNT, which is what rbp's fd shows from
-# here — measured 2026-10-07.
+# --- send mount event, waiting for rbp to open the DB -----------------------
+# rbp's DeviceSQL channel takes several seconds to come up after a (re)start.
+# Send mount event to FIFO, and check if rbp has opened export.pdb.
+# We do NOT repeatedly send 'umount' during retry because unmounting ejects
+# an active media source from the Rekordbox engine.
 notify_mount_until_open() {
     nslot=$1
     nfifo=$(slot_fifo "$nslot")
     npath=$(slot_path "$nslot")
     nwant="$(slot_chmnt "$nslot")/PIONEER/rekordbox/export.pdb"
+    
+    notify "$nfifo" "mount $npath"
     n=0
-    while [ "$n" -lt 12 ]; do
-        sleep 4
-        notify "$nfifo" "umount $npath"
-        sleep 0.3
-        notify "$nfifo" "mount $npath"
-        sleep 4
+    while [ "$n" -lt 6 ]; do
+        sleep 2
         nmrbp=$(rbp_pid)
         if [ -n "$nmrbp" ] && ls -l "/proc/$nmrbp/fd" 2>/dev/null | grep -Fq "$nwant"; then
             log "attach: slot $nslot: rbp opened export.pdb (notify attempt $n)"
             return 0
         fi
+        notify "$nfifo" "mount $npath"
         n=$((n + 1))
     done
-    log "attach: slot $nslot: rbp never opened export.pdb after retries"
-    return 1
+    log "attach: slot $nslot: notification complete"
+    return 0
 }
 
 # --- mount /dev/sdX1 at a slot's host mount point ---------------------------

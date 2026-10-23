@@ -908,6 +908,10 @@ static void init_real_alsa(void)
     real_snd_pcm_sw_params_malloc = dlsym(lib, "snd_pcm_sw_params_malloc");
     real_snd_pcm_sw_params_free = dlsym(lib, "snd_pcm_sw_params_free");
 
+    int (*real_snd_lib_error_set_handler)(void *) = dlsym(lib, "snd_lib_error_set_handler");
+    if (real_snd_lib_error_set_handler)
+        real_snd_lib_error_set_handler(NULL);
+
     check_alsa_constants();
 
     alog("audioshim: real ALSA initialized\n");
@@ -1384,7 +1388,15 @@ static void load_config(void)
      * default below reaches only a shim run by hand with no environment at all,
      * exactly as AUDIO_DEV's does. rb.conf ships the list, and rb.local.conf
      * overrides it per unit. */
-    s = env_str("AUDIO_MIRROR_DEV", AUDIO_MIRROR_DEV_DEFAULT);
+    const char *env_m = getenv("AUDIO_MIRROR_DEV");
+    if (env_m != NULL) {
+        if (strcmp(env_m, "off") == 0 || strcmp(env_m, "none") == 0)
+            s = "";
+        else
+            s = env_m;
+    } else {
+        s = AUDIO_MIRROR_DEV_DEFAULT;
+    }
     if (strlen(s) >= sizeof g_cfg.mirror_dev) {
         alog("audioshim: AUDIO_MIRROR_DEV is longer than %u bytes; using the "
              "default %s\n", (unsigned)sizeof g_cfg.mirror_dev - 1,

@@ -432,6 +432,7 @@ static void page_html(struct vnc_http *h, struct sbuf *b)
     {
         float jog_mult = 1.0f;
         FILE *fj = fopen("/run/rblive4/jog_speed", "r");
+        if (!fj) fj = fopen("/opt/rblive4/jog_speed", "r");
         if (fj) {
             float v = 1.0f;
             if (fscanf(fj, "%f", &v) == 1 && v >= 0.05f && v <= 20.0f)
@@ -738,12 +739,15 @@ static void route_get(struct vnc_http *h, struct hconn *c, const char *target)
         if (query_set(target, word, sizeof word)) {
             float mult = (float)atof(word);
             if (mult >= 0.05f && mult <= 20.0f) {
-                FILE *f = fopen("/run/rblive4/jog_speed", "w");
-                if (f) {
-                    fprintf(f, "%.2f\n", mult);
-                    fclose(f);
-                    vlog("http: jog speed multiplier set to %.2f", mult);
+                const char *jpaths[] = { "/run/rblive4/jog_speed", "/opt/rblive4/jog_speed" };
+                for (int i = 0; i < 2; i++) {
+                    FILE *f = fopen(jpaths[i], "w");
+                    if (f) {
+                        fprintf(f, "%.2f\n", mult);
+                        fclose(f);
+                    }
                 }
+                vlog("http: jog speed multiplier set to %.2f (persisted)", mult);
             }
         }
         reply(c, 303, "See Other", "text/plain; charset=utf-8", "", 0,

@@ -402,6 +402,19 @@ static void flx6_pitch(int ch, int cc, int val)
                ch, sch, pos, (double)norm, v10);
 }
 
+static void flx6_ensure_crossfader_assign(void)
+{
+     static int assigned = 0;
+     if (assigned) return;
+     void *me = mixer_engine();
+     if (!me) return;
+     me_set_crossfader_assign(0, 1); /* Deck 1 (input 0) -> Crossfader A */
+     me_set_crossfader_assign(1, 2); /* Deck 2 (input 1) -> Crossfader B */
+     me_set_crossfader_curve(1);     /* Standard linear curve */
+     assigned = 1;
+     klog("knobshim2: FLX6 crossfader assigned Ch1->A, Ch2->B\n");
+}
+
 static float flx6_get_jog_multiplier(void)
 {
      static unsigned long long last_check = 0;
@@ -410,6 +423,7 @@ static float flx6_get_jog_multiplier(void)
      if (now - last_check >= 500) {
           last_check = now;
           FILE *f = fopen("/run/rblive4/jog_speed", "r");
+          if (!f) f = fopen("/opt/rblive4/jog_speed", "r");
           if (f) {
                float val = 1.0f;
                if (fscanf(f, "%f", &val) == 1 && val >= 0.05f && val <= 20.0f) {
@@ -511,6 +525,13 @@ static void flx6_cc_abs(int ch, int cc, int val)
           if (key == K_FADER && sch >= 1 && sch <= 2) {
                g_fader[sch] = v;
                g_fader_seen[sch] = 1;
+          } else if (key == K_XFADER) {
+               flx6_ensure_crossfader_assign();
+               me_set_crossfader(fval);
+               send_rx_key_f(key, OP_VALUE, 0, v, fval);
+               if (verbose)
+                    klog("knobshim2: crossfader val=%d f=%.3f\n", v, (double)fval);
+               return;
           } else if (key == K_HPMIX) {
                g_cue_mix = fval;
           } else if (key == K_HPLEVEL) {
@@ -883,15 +904,21 @@ static void flx6_event(const struct snd_seq_event *ev)
                if (on) {
                     int sel = (ch == CH_FX1) ? (note - 112) : (3 + (note - 112));
                     if (sel >= 0 && sel < 6) {
+                         /* Auto Disable FX when switching Beat FX so state matches */
+                         if (rbp_beatfx_on() > 0) {
+                              send_rx_key(K_BFX, OP_PRESS, CH_GLOBAL, 0);
+                              send_rx_key(K_BFX, OP_RELEASE, CH_GLOBAL, 0);
+                         }
+                         for (int s = 0; s < 6; s++) flx6_slots[s].on = 0;
+
                          flx6_active_slot = sel;
                          send_rx_key(K_BFXTYPE, OP_VALUE, CH_GLOBAL, flx6_slots[sel].fx_type);
                          send_rx_key(K_BFXCH, OP_VALUE, CH_GLOBAL, flx6_slots[sel].channel);
                          send_rx_key_f(K_DEPTH, OP_VALUE, CH_GLOBAL,
                                        flx6_slots[sel].depth * 8,
                                        (float)flx6_slots[sel].depth / 127.0f);
-                         klog("knobshim2: FLX6 BFX SELECT -> Slot %d (FX%d-%d, type %d, ch %d)\n",
-                              sel + 1, (sel < 3) ? 1 : 2, (sel % 3) + 1,
-                              flx6_slots[sel].fx_type, flx6_slots[sel].channel);
+                         klog("knobshim2: FLX6 BFX SELECT -> Slot %d (Auto-disabled FX, type %d, ch %d)\n",
+                              sel + 1, flx6_slots[sel].fx_type, flx6_slots[sel].channel);
                     }
                }
                return;
@@ -903,13 +930,12 @@ static void flx6_event(const struct snd_seq_event *ev)
                     int slot = (ch == CH_FX1) ? (note - 71) : (3 + (note - 71));
                     if (slot >= 0 && slot < 6) {
                          flx6_active_slot = slot;
-                         flx6_slots[slot].on = !flx6_slots[slot].on;
+                         int want_on = !flx6_slots[slot].on;
+                         /* Ensure only the active slot is turned on (mutually exclusive) */
+                         for (int s = 0; s < 6; s++) flx6_slots[s].on = 0;
+                         flx6_slots[slot].on = want_on;
 
-                         int any_on = 0;
-                         for (int s = 0; s < 6; s++) {
-                              if (flx6_slots[s].on) any_on = 1;
-                         }
-
+                         int any_on = want_on;
                          int cur_rbp_on = rbp_beatfx_on();
                          if (any_on && cur_rbp_on <= 0) {
                               /* Turn rbp Beat FX ON */
@@ -924,17 +950,10 @@ static void flx6_event(const struct snd_seq_event *ev)
                               /* Turn rbp Beat FX OFF */
                               send_rx_key(K_BFX, OP_PRESS, CH_GLOBAL, 0);
                               send_rx_key(K_BFX, OP_RELEASE, CH_GLOBAL, 0);
-                         } else if (flx6_slots[slot].on) {
-                              /* Switch active effect to newly activated slot */
-                              send_rx_key(K_BFXTYPE, OP_VALUE, CH_GLOBAL, flx6_slots[slot].fx_type);
-                              send_rx_key(K_BFXCH, OP_VALUE, CH_GLOBAL, flx6_slots[slot].channel);
-                              send_rx_key_f(K_DEPTH, OP_VALUE, CH_GLOBAL,
-                                            flx6_slots[slot].depth * 8,
-                                            (float)flx6_slots[slot].depth / 127.0f);
                          }
-                         klog("knobshim2: FLX6 BFX Button Slot %d (FX%d-%d) -> %s (any_on=%d, rbp_on=%d)\n",
+                         klog("knobshim2: FLX6 BFX Button Slot %d (FX%d-%d) -> %s\n",
                               slot + 1, (slot < 3) ? 1 : 2, (slot % 3) + 1,
-                              flx6_slots[slot].on ? "ON" : "OFF", any_on, cur_rbp_on);
+                              flx6_slots[slot].on ? "ON" : "OFF");
                     }
                }
                return;
@@ -1061,6 +1080,7 @@ static void flx6_tick(void)
 {
      flx6_jog_idle();
      flx6_check_fx_config();
+     flx6_ensure_crossfader_assign();
 
      /* Sync active slot FX type if changed on rbp screen */
      int cur_t = rbp_beatfx_type();

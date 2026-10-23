@@ -59,6 +59,9 @@ int me_get_cue(int idx);
 void me_set_stereo(int type);
 void me_set_master_cue(int on);
 int me_get_master_cue(void);
+void me_set_crossfader(float f);
+void me_set_crossfader_assign(int input, int assign);
+void me_set_crossfader_curve(int curve);
 
 /* The per-deck ui::PlayerInnards, and the beat-loop knob's way in. The cursor
  * (which loop length is selected) is ours: rbp has no delta handler for the

@@ -1610,12 +1610,13 @@ int vnc_session_run(const struct vnc_session_opts *o)
          * -- for a viewer that is not there. So the timer only advances when a client
          * has finished its handshake, and jumps forward when one does, so its first
          * frame is a fresh one rather than whatever was in the buffer. */
+        int live_viewers = 0;
         {
-            int live = 0, want_soon = 0;
+            int want_soon = 0;
             for (i = 0; i < VNC_MAX_CLIENTS; i++) {
                 struct client *c = &g_clients[i];
                 if (c->fd < 0 || c->state != CS_READY) continue;
-                live++;
+                live_viewers++;
                 if (!c->got_frame) want_soon = 1;
             }
             /* A PAGE COUNTED AS A VIEWER. Somebody watching the preview is somebody
@@ -1623,14 +1624,14 @@ int vnc_session_run(const struct vnc_session_opts *o)
              * the capture have to run for them too -- and, just as importantly, stop
              * when they close the tab. */
             if (vnc_http_preview_wanted(http))
-                live++;
-            if (!live)
+                live_viewers++;
+            if (!live_viewers)
                 next_tick = now + (unsigned long long)(1000 / fps);
             else if (want_soon)
                 next_tick = now;
         }
 
-        if (cap && now >= next_tick) {
+        if (cap && live_viewers && now >= next_tick) {
             frame_tick(&fr, cap);
             next_tick = now + (unsigned long long)(1000 / fps);
 

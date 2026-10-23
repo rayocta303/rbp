@@ -422,6 +422,11 @@
 #define ME_SET_MASTER_CUE 0x0005766cUL
 #define ME_GET_MASTER_CUE 0x0005767cUL
 
+/* Crossfader control in MixerEngine */
+#define ME_SET_CROSSFADER        0x00056fc4UL   /* MixerEngine::setCrossFader(float) */
+#define ME_SET_CROSSFADER_CURVE  0x00056fe8UL   /* MixerEngine::setCrossFaderCurve(EnCrossFaderCurve) */
+#define ME_SET_CROSSFADER_ASSIGN 0x00057008UL   /* MixerEngine::setCrossFaderAssign(EnMixerInput, EnCrossFaderAssign) */
+
 
 /* ---- DJ FX: channel assign, effect select, time/parameter -----------------
  * SC Live 4 panel (JP21_Controller_Assignments.qml):

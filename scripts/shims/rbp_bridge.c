@@ -226,6 +226,31 @@ int me_get_master_cue(void)
           return -1;
      return ((int (*)(void *))ME_GET_MASTER_CUE)(engine);
 }
+
+void me_set_crossfader(float f)
+{
+     void *engine = mixer_engine();
+     if (!engine)
+          return;
+     ((void (*)(void *, float))ME_SET_CROSSFADER)(engine, f);
+}
+
+void me_set_crossfader_assign(int input, int assign)
+{
+     void *engine = mixer_engine();
+     if (!engine)
+          return;
+     ((void (*)(void *, int, int))ME_SET_CROSSFADER_ASSIGN)(engine, input, assign);
+}
+
+void me_set_crossfader_curve(int curve)
+{
+     void *engine = mixer_engine();
+     if (!engine)
+          return;
+     ((void (*)(void *, int))ME_SET_CROSSFADER_CURVE)(engine, curve);
+}
+
 static void *g_plinn[2];              /* ui::PlayerInnards per deck */
 
 /* Locate the per-deck ui::PlayerInnards by scanning writable mappings for its
