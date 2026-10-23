@@ -82,6 +82,7 @@
 #define N_MEM_CUE     61   /* CUE/LOOP MEMORY */
 #define N_MEM_DEL     62   /* +SHIFT CUE/LOOP MEMORY -> Delete */
 #define N_SYNC        88   /* BEAT SYNC  (+SHIFT 93) */
+#define N_SYNC_SHIFT  93   /* 1-15L/R +SHIFT BEAT SYNC -> Master Tempo / Key Lock */
 #define N_MASTER      92   /* MASTER */
 #define N_TEMPO_RANGE 96   /* +SHIFT MASTER -> Tempo Range (+-6/10/16/WIDE) */
 #define N_CH_CUE      84   /* Channel CUE (PFL) */
@@ -96,6 +97,8 @@
 /* Deck select toggle notes */
 #define N_DECK_TOGGLE 114  /* Deck 3/4 button press (ignored on RX3) */
 #define N_DECK_STATE  60   /* Deck state feedback */
+#define N_DECK_L_SHIFT 124 /* 1-5L SHIFT + DECK L -> SLIP Deck 1 (on CH_MIX) */
+#define N_DECK_R_SHIFT 125 /* 1-5R SHIFT + DECK R -> SLIP Deck 2 (on CH_MIX) */
 
 /* ---- Mixer & Browse buttons on CH_MIX (ch 6) ---- */
 #define N_BROWSE_PUSH       65  /* Browse knob push */
@@ -591,6 +594,7 @@ static void flx6_build(void)
           add_note(rch, N_OUT, K_LOOPOUT, sch);
           add_note(rch, N_4BEAT, K_RELOOP, sch);
           add_note(rch, N_SYNC, K_SYNC, sch);
+          add_note(rch, N_SYNC_SHIFT, K_MT, sch);
           add_note(rch, N_MASTER, K_MASTER, sch);
           add_note(rch, N_TEMPO_RANGE, K_TEMPO_RANGE, sch);
           add_note(rch, N_SHIFT, 0, sch);
@@ -656,14 +660,17 @@ static void flx6_build(void)
      add_note_repeat(CH_MIX, N_LOAD1_SHIFT, K_TRACKFILTER, CH_GLOBAL);
      add_note(CH_MIX, N_LOAD2_SHIFT, K_SHORTCUT, CH_GLOBAL);
 
+     /* 1-5L/R Shift + Deck -> SLIP mode toggle (Deck 1 / Left & Deck 2 / Right) */
+     add_note(CH_MIX, N_DECK_L_SHIFT, K_SLIP, 1);
+     add_note(CH_MIX, N_DECK_R_SHIFT, K_SLIP, 2);
+
      /* Beat FX controls (Slots 1..3 on FX1 and FX2) are handled dynamically
       * per slot address in flx6_event() and flx6_update_bfx_led() */
 
-     /* Merge FX as Beat FX depth / enable */
+     /* Merge FX L as Beat FX depth / enable (Merge FX R rotary is Beat FX Time) */
      add_note(CH_FX1, N_MERGE_FX_PRESS, K_BFX, CH_GLOBAL);
      add_note(CH_FX2, N_MERGE_FX_PRESS, K_BFX, CH_GLOBAL);
      add_abs(CH_FX1, CC_MERGE_FX, K_DEPTH, CH_GLOBAL);
-     add_abs(CH_FX2, CC_MERGE_FX, K_DEPTH, CH_GLOBAL);
 }
 
 static int flx6_beat_to_cc100(int numer, int denom)
@@ -1074,6 +1081,18 @@ static void flx6_event(const struct snd_seq_event *ev)
                return;
           }
 
+          /* 1-14R Merge FX Parameter R rotary turn -> Beat FX Time encoder (K_TIME 0x448e) */
+          if (ch == CH_FX2 && (cc == CC_MERGE_FX || cc == (CC_MERGE_FX + 32))) {
+               int delta = (val >= 64) ? (val - 128) : val;
+               if (delta != 0) {
+                    send_rx_key_fl(K_TIME, OP_ROTATE, CH_GLOBAL, delta, 0.0f, delta);
+                    if (verbose)
+                         klog("knobshim2: Merge FX R turn v=%d delta=%d -> K_TIME\n",
+                              val, delta);
+               }
+               return;
+          }
+
           /* Standard continuous controls */
           flx6_cc_abs(ch, cc, val);
      }
@@ -1106,7 +1125,7 @@ static const struct led_notes flx6_leds = {
      .n_sync = 88,
      .n_cue = 12,
      .n_play = 11,
-     .n_keylock = -1,
+     .n_keylock = 93,
      .n_vinyl = -1,
      .n_slip = -1,
      .n_loopin = 16,
