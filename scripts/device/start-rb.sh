@@ -28,7 +28,7 @@ EDB_LOG="$LOG_DIR/edb_streamd.log"
 
 # Prepare /run/rblive4 runtime directory and restore persistent settings
 mkdir -p /run/rblive4 2>/dev/null
-for cf in jog_speed flx6_fx.conf vnc.mode vnc.input vnc.live vnc.fps; do
+for cf in jog_speed xfader_curve xfader_enable flx6_fx.conf vnc.mode vnc.input vnc.live vnc.fps; do
     if [ -f "$RB_DEPLOY_ROOT/$cf" ] && [ ! -f "/run/rblive4/$cf" ]; then
         cp -f "$RB_DEPLOY_ROOT/$cf" "/run/rblive4/$cf" 2>/dev/null || true
     fi

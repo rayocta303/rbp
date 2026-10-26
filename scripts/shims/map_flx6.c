@@ -405,18 +405,58 @@ static void flx6_pitch(int ch, int cc, int val)
                ch, sch, pos, (double)norm, v10);
 }
 
-static void flx6_ensure_crossfader_assign(void)
+static int g_xfader_enabled = 1;
+
+static void flx6_sync_crossfader(void)
 {
-     static int assigned = 0;
-     if (assigned) return;
+     static unsigned long long last_check = 0;
+     static int cached_curve = -1;
+     static int cached_enabled = -1;
+     unsigned long long now = shim_now_ms();
+     if (now - last_check < 500) return;
+     last_check = now;
      void *me = mixer_engine();
      if (!me) return;
-     me_set_crossfader_assign(0, 1); /* Deck 1 (input 0) -> Crossfader A */
-     me_set_crossfader_assign(1, 2); /* Deck 2 (input 1) -> Crossfader B */
-     /* Do not overwrite crossfader curve; let Rekordbox / rbp system profile govern it */
-     assigned = 1;
-     klog("knobshim2: FLX6 crossfader assigned Ch1->A, Ch2->B (curve=%d)\n",
-          me_get_crossfader_curve());
+
+     int en = 1;
+     FILE *fe = fopen("/run/rblive4/xfader_enable", "r");
+     if (!fe) fe = fopen("/opt/rblive4/xfader_enable", "r");
+     if (fe) {
+          int v = 1;
+          if (fscanf(fe, "%d", &v) == 1 && (v == 0 || v == 1))
+               en = v;
+          fclose(fe);
+     }
+
+     int cv = 1;
+     FILE *fc = fopen("/run/rblive4/xfader_curve", "r");
+     if (!fc) fc = fopen("/opt/rblive4/xfader_curve", "r");
+     if (fc) {
+          int v = 1;
+          if (fscanf(fc, "%d", &v) == 1 && v >= 0 && v <= 2)
+               cv = v;
+          fclose(fc);
+     }
+
+     if (en != cached_enabled) {
+          cached_enabled = en;
+          g_xfader_enabled = en;
+          if (en) {
+               me_set_crossfader_assign(0, 1); /* Ch1 -> A */
+               me_set_crossfader_assign(1, 2); /* Ch2 -> B */
+               me_set_crossfader_curve(cv);
+               cached_curve = cv;
+               klog("knobshim2: crossfader enabled (Ch1->A, Ch2->B, curve=%d)\n", cv);
+          } else {
+               me_set_crossfader_assign(0, 0); /* Ch1 -> Thru */
+               me_set_crossfader_assign(1, 0); /* Ch2 -> Thru */
+               klog("knobshim2: crossfader disabled (both channels THRU)\n");
+          }
+     } else if (en && cv != cached_curve) {
+          cached_curve = cv;
+          me_set_crossfader_curve(cv);
+          klog("knobshim2: crossfader curve changed to %d (current=%d)\n", cv, me_get_crossfader_curve());
+     }
 }
 
 static float flx6_get_jog_multiplier(void)
@@ -430,7 +470,7 @@ static float flx6_get_jog_multiplier(void)
           if (!f) f = fopen("/opt/rblive4/jog_speed", "r");
           if (f) {
                float val = 1.0f;
-               if (fscanf(f, "%f", &val) == 1 && val >= 0.05f && val <= 20.0f) {
+               if (fscanf(f, "%f", &val) == 1 && val >= 0.01f && val <= 1.0f) {
                     cached_mult = val;
                }
                fclose(f);
@@ -531,12 +571,17 @@ static void flx6_cc_abs(int ch, int cc, int val)
                g_fader_seen[sch] = 1;
                me_set_channel_fader(sch - 1, fval);
           } else if (key == K_XFADER) {
-               flx6_ensure_crossfader_assign();
-               me_set_crossfader(fval);
-               send_rx_key_f(key, OP_VALUE, 0, v, fval);
-               if (verbose)
-                    klog("knobshim2: crossfader val=%d f=%.3f (curve=%d)\n",
-                         v, (double)fval, me_get_crossfader_curve());
+               flx6_sync_crossfader();
+               if (g_xfader_enabled) {
+                    me_set_crossfader(fval);
+                    send_rx_key_f(key, OP_VALUE, 0, v, fval);
+                    if (verbose)
+                         klog("knobshim2: crossfader val=%d f=%.3f (curve=%d)\n",
+                              v, (double)fval, me_get_crossfader_curve());
+               } else {
+                    if (verbose)
+                         klog("knobshim2: crossfader ignored (disabled)\n");
+               }
                return;
           } else if (key == K_HPMIX) {
                g_cue_mix = fval;
@@ -1102,7 +1147,7 @@ static void flx6_tick(void)
 {
      flx6_jog_idle();
      flx6_check_fx_config();
-     flx6_ensure_crossfader_assign();
+     flx6_sync_crossfader();
 
      /* Sync active slot FX type if changed on rbp screen */
      int cur_t = rbp_beatfx_type();
