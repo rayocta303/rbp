@@ -43,6 +43,7 @@
 #include "envutil.h"
 #include "usb_label.h"   /* what a media device's name may contain -- the same rules
                           * knobshim writes into rbp's own device record with */
+#include "ui_overlay.h"
 
 /* The one rbp thing this file knows: the keycode a QUANTIZE tap becomes, and
  * how to send it. rbp_key.h is a leaf (rbp_abi.h and libc, nothing more), which
@@ -2621,6 +2622,17 @@ static void pointer_report(int down, int x, int y, int allow_menu, int held_ms)
      * sub-screen, so a press on rbp's browse screen still reaches rbp untouched --
      * which is what keeps the six columns, the keyboard and the mouse working over
      * it. */
+    /* Check UI overlay touches on UTILITY or SHORTCUT */
+    if (verdict == MZ_FEED_NONE && !menu_is_open() && !side_any_open()) {
+        int rbp_m = 0;
+        if (is_rbp_process()) {
+            rbp_m = *(volatile int *)(uintptr_t)(UIBROWSE_GLOBAL + UIBROWSE_OFF_MODE);
+        }
+        if (ui_overlay_touch(down, x, y, rbp_m)) {
+            return;
+        }
+    }
+
     if (verdict == MZ_FEED_NONE && allow_menu &&
         !menu_is_open() && !side_any_open()) {
         struct util_state ust;

@@ -34,6 +34,13 @@ for cf in jog_speed xfader_curve xfader_enable flx6_fx.conf vnc.mode vnc.input v
     fi
 done
 
+# Waveform 60 FPS Auto ON at Boot
+echo 60 > /run/rblive4/vnc.fps
+[ -f "$RB_DEPLOY_ROOT/vnc.fps" ] || echo 60 > "$RB_DEPLOY_ROOT/vnc.fps" 2>/dev/null || true
+export RB_PAN_PACER_MS="${RB_PAN_PACER_MS:-16.666666}"
+export RB_VNC_FPS="${RB_VNC_FPS:-60}"
+
+
 echo "start-rb: deploy root $RB_DEPLOY_ROOT"
 echo "start-rb: chroot      $RB_CHROOT"
 rb_bootmsg "deploy root $RB_DEPLOY_ROOT"

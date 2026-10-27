@@ -112,6 +112,8 @@
  * comes from point_fit(), the same rule the DirectFB driver presents with.
  */
 #define _GNU_SOURCE
+#include <stdint.h>
+#include <stddef.h>
 #include "menu_draw.h"
 #include "menu_paint.h"
 #include "menu_zone.h"
@@ -135,6 +137,9 @@
 #include "pointsrc.h"          /* pointsrc_log */
 #include "syscalls.h"
 #include "envutil.h"
+#include "rbp_key.h"
+#include "rbp_abi.h"
+#include "ui_overlay.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -1163,6 +1168,9 @@ static void menu_settings_repaint(void)
     unsigned usb, mixer, decks;
     int row, flash;
 
+    if (!g.settings_ok)
+        return;
+
     pointsrc_settings_state(&S);
     menu_settings_key(&S, &usb, &mixer, &decks);
     flash = settings_hold_flash() ? settings_hold_row() : 0;
@@ -1215,11 +1223,7 @@ static void menu_settings_live(void)
 
 /* Bring the panel's plane into line with the panel. Called under g_lock from the tick,
  * beside the chooser's and the picker's syncs and before the band's path, which the
- * panel's being up skips entirely.
- *
- * A machine that refuses a panel-sized plane gets the page route and keeps working;
- * settings_fail is the once-only latch that stops it retrying at the tick period, on the
- * thread rbp presents from. */
+ * panel's being up skips entirely. */
 static void menu_settings_plane_sync(void)
 {
     if (!settings_is_open()) {
@@ -1228,9 +1232,6 @@ static void menu_settings_plane_sync(void)
             g.settings_ok = g.settings_on = 0;
             pointsrc_log("settings: the panel closed -- its plane is released");
         }
-        /* Cleared unconditionally, inside and outside the branch above: a closed panel's
-         * image is stale whether or not it ever had a plane, and leaving the tuple live
-         * across a close would show the previous panel for a tick. */
         g.settings_valid   = 0;
         g.settings_pending = 0;
         g.settings_fail    = 0;
@@ -1246,10 +1247,6 @@ static void menu_settings_plane_sync(void)
         } else {
             g.settings_ok = 1;
             g.settings_on = 0;
-            /* A fresh dumb buffer holds nothing anyone can read, so the image has to be
-             * COPIED in before the panel is shown -- which is what settings_pending says,
-             * and settings_valid, which the show waits on, is what says there is a real
-             * picture to copy. */
             g.settings_pending = 1;
         }
     }
@@ -2283,8 +2280,7 @@ void menu_frame_tick(void)
 
     if (!g.ok)
         return;
-    if (pthread_mutex_trylock(&g_lock) != 0)
-        return;
+    pthread_mutex_lock(&g_lock);
 
     /* THE PAD'S PLANE FIRST, before any route is decided, and it is the only one here
      * that goes first. The five boxes below each give their predecessor the chance to
@@ -2375,6 +2371,18 @@ void menu_frame_tick(void)
         if (g.painted_open) {
             g.painted_open = 0;
             pointsrc_log("menu: panel closed");
+        }
+        {
+            int rbp_mode = 0;
+            if (is_rbp_process()) {
+                rbp_mode = *(volatile int *)(uintptr_t)(UIBROWSE_GLOBAL + UIBROWSE_OFF_MODE);
+            }
+            if (rbp_mode == BROWSE_MODE_UTILITY || rbp_mode == 10) {
+                struct menu_view fv = g.view;
+                fv.pix = g.fb_pix;
+                fv.pitch = g.fb_pitch;
+                ui_overlay_draw(&fv, rbp_mode);
+            }
         }
     } else if (!g.front_valid) {
         /* No image cache: there is nowhere to build one, so the panel is painted
@@ -2527,7 +2535,8 @@ static void *menu_thread(void *arg)
          * -- and the touch thread must stay the one that OWNS the gesture. A shut panel
          * returns immediately. */
         menu_settings_build();
-        menu_frame_tick();
+        /* Tick is called ONLY from FBIO_WAITFORVSYNC (render thread) to guarantee
+         * 100% vsync synchronization and zero tearing/flickering. */
         usleep((useconds_t)period_us);
     }
     return NULL;

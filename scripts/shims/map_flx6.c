@@ -34,6 +34,8 @@
 #include <string.h>
 #include <strings.h>
 #include <sound/asequencer.h>
+#include <pthread.h>
+#include <unistd.h>
 
 #include "shimutil.h"
 #include "shmstate.h"
@@ -108,8 +110,10 @@
 #define N_VIEW_SHIFT        104 /* Dedicated SHIFT + VIEW button -> SOURCE screen */
 #define N_LOAD1             70  /* LOAD deck 1 */
 #define N_LOAD2             71  /* LOAD deck 2 */
-#define N_LOAD1_SHIFT       88  /* SHIFT + LOAD 1 -> TRACK FILTER */
+#define N_LOAD3             72  /* LOAD deck 3 */
+#define N_LOAD1_SHIFT       88  /* SHIFT + LOAD 1 -> UTILITY / Setting */
 #define N_LOAD2_SHIFT       89  /* SHIFT + LOAD 2 -> SHORTCUT */
+#define N_LOAD3_SHIFT       90  /* SHIFT + LOAD 3 -> Open / Toggle MIDI / SOURCE view */
 #define N_MASTER_CUE        99  /* MASTER CUE */
 
 /* ---- Beat FX notes (channels 4 & 5) ---- */
@@ -158,6 +162,28 @@ static int jog_rev = 0;
 static int jog_idle_ms = 120;
 static int jog_verbose = 0;
 static int tempo_verbose = 0;
+
+static void *flx6_trigger_settings(void *arg)
+{
+     (void)arg;
+     int mode = 0;
+     if (is_rbp_process()) {
+          mode = *(volatile int *)(uintptr_t)(UIBROWSE_GLOBAL + UIBROWSE_OFF_MODE);
+     }
+     if (mode == BROWSE_MODE_UTILITY) {
+          /* If already in UTILITY, send K_BACK to exit */
+          send_rx_key(K_BACK, OP_PRESS, CH_GLOBAL, 0);
+          send_rx_key(K_BACK, OP_RELEASE, CH_GLOBAL, 0);
+          klog("knobshim2: FLX6 Settings -> Exiting UTILITY screen\n");
+     } else {
+          /* Hold K_MENU (0x0206) for 500ms to open rbp's native UTILITY / Settings */
+          send_rx_key(K_MENU, OP_PRESS, CH_GLOBAL, 0);
+          usleep(500000);
+          send_rx_key(K_MENU, OP_RELEASE, CH_GLOBAL, 0);
+          klog("knobshim2: FLX6 Settings -> Opening UTILITY screen (K_MENU held 500ms)\n");
+     }
+     return NULL;
+}
 static int tempo_rev = 0;
 
 #define BFX_TYPE_POSITIONS 14
@@ -702,8 +728,9 @@ static void flx6_build(void)
      add_note(CH_MIX, N_LOAD2, K_LOAD, 2);
 
      /* Shift + Load shortcuts */
-     add_note_repeat(CH_MIX, N_LOAD1_SHIFT, K_TRACKFILTER, CH_GLOBAL);
+     /* SHIFT + LOAD 1 (note 88) is handled in flx6_event() to toggle UTILITY / Setting */
      add_note(CH_MIX, N_LOAD2_SHIFT, K_SHORTCUT, CH_GLOBAL);
+     add_note(CH_MIX, N_LOAD3_SHIFT, K_SOURCE, CH_GLOBAL);
 
      /* 1-5L/R Shift + Deck -> SLIP mode toggle (Deck 1 / Left & Deck 2 / Right) */
      add_note(CH_MIX, N_DECK_L_SHIFT, K_SLIP, 1);
@@ -1045,6 +1072,27 @@ static void flx6_event(const struct snd_seq_event *ev)
                     send_rx_key(K_LOOPIN, OP_RELEASE, sch, 0);
                     klog("knobshim2: FLX6 Auto 4-Beat Loop ch%d note%d (deck %d)\n",
                          ch + 1, note, sch);
+               }
+               return;
+          }
+
+          /* SHIFT + LOAD 1 (note 88 on CH_MIX) -> Buka / Tutup Menu UTILITY */
+          if (ch == CH_MIX && note == N_LOAD1_SHIFT) {
+               if (on) {
+                    pthread_t th;
+                    pthread_create(&th, NULL, flx6_trigger_settings, NULL);
+                    pthread_detach(th);
+                    klog("knobshim2: FLX6 SHIFT+LOAD 1 -> Toggle Menu UTILITY\n");
+               }
+               return;
+          }
+
+          /* SHIFT + LOAD 3 (note 96 from hardware, or note 90) -> Open / Toggle MIDI / SOURCE view */
+          if (ch == CH_MIX && (note == 96 || note == N_LOAD3_SHIFT)) {
+               if (on) {
+                    send_rx_key(K_SOURCE, OP_PRESS, CH_GLOBAL, 0);
+                    send_rx_key(K_SOURCE, OP_RELEASE, CH_GLOBAL, 0);
+                    klog("knobshim2: FLX6 SHIFT+LOAD 3 (note %d) -> Open / Toggle MIDI / SOURCE view (K_SOURCE 0x%04x)\n", note, K_SOURCE);
                }
                return;
           }

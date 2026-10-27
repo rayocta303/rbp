@@ -386,7 +386,7 @@ FBSHIM_OBJS := fb_shim.o tscfake.o pointsrc.o point_xform.o touch_zone.o \
                deckbadge_zone.o deckbadge_paint.o deckbadge_plane.o bpmbox_zone.o \
                settings_zone.o settings_paint.o \
                controllers.o usb_devices.o \
-               vidmask.o
+               vidmask.o net_info.o ui_overlay.o
 # controllers.o and usb_devices.o are here for ONE question the settings panel asks:
 # whether a recognised digital mixer is on the USB bus, which is what makes the MIXER
 # ROUTE row operable ("refuse the tap", settings_zone.h). It is the same pair audioshim.so
@@ -405,7 +405,8 @@ FBSHIM_HDRS := tscfake.h pointsrc.h point_xform.h touch_zone.h syscalls.h \
                side_paint.h rbp_vu.h util_zone.h wave_zone.h \
                fx_zone.h fx_paint.h hc_zone.h usb_label.h \
                fxpad_zone.h fxpad_paint.h pitch_state.h \
-               settings_zone.h settings_paint.h controllers.h usb_devices.h
+               settings_zone.h settings_paint.h controllers.h usb_devices.h \
+               net_info.h ui_overlay.h
 
 fbshim.so: $(FBSHIM_OBJS) rbp_key.o fader_state.o rbp_transport.o pitch_state.o \
            keylog.o keylog_state.o compat_glibc.o $(FBSHIM_HDRS) rbp_transport.h pitch_state.h \

@@ -37,6 +37,8 @@
 #include "menu_font.h"
 
 #include <stddef.h>          /* size_t, NULL */
+#include <stdio.h>
+#include "net_info.h"
 
 /* --- pixels, in the view's own (framebuffer) coordinates -------------------- */
 
@@ -325,12 +327,15 @@ void settings_paint(const struct menu_view *v, const struct settings_state *S,
      * panel's caption and not a sixth row. */
     {
         int tx0, ty0, tx1, ty1, w, line_fy;
+        char title_buf[128], ip[64], host[64];
+        get_system_net_info(ip, sizeof(ip), host, sizeof(host));
+        snprintf(title_buf, sizeof(title_buf), "%s - %s (%s)", SB_TITLE, host, ip);
 
         sp_rect(v, SB_X0 + SB_BORDER, SB_TITLE_Y0, SB_X1 + 1 - SB_BORDER, SB_TITLE_Y1 + 1,
                 &tx0, &ty0, &tx1, &ty1);
-        w = menu_text_width(SB_TITLE);
+        w = menu_text_width(title_buf);
         line_fy = ty0 + ((ty1 - ty0) - MENU_FONT_LINE) / 2;
-        sp_text(v, (tx0 + tx1 - w) / 2, line_fy, SB_TITLE, fill, ink, tx0, tx1);
+        sp_text(v, (tx0 + tx1 - w) / 2, line_fy, title_buf, fill, ink, tx0, tx1);
     }
 
     /* The rule under it, one logical px, across the inner width. */
