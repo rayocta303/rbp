@@ -469,6 +469,21 @@ if [ -z "$RBP" ]; then
     exit 1
 fi
 
+# --- 9b. auto-connect Pro DJ Link -------------------------------------------
+if [ "${RB_NETALIAS:-0}" = 1 ]; then
+    (
+        sleep 1.5
+        echo "start-rb: triggering Pro DJ Link auto-connect..."
+        rb_bootmsg "Pro DJ Link: auto-connecting..."
+        printf %s connect > /tmp/udev_usb1
+        touch /tmp/rb_link.req 2>/dev/null || true
+        sleep 1
+        # Send initial broadcast wake-up probe for Rekordbox / LAN peers
+        python3 -c "import socket; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1); pkt = bytearray(b'Qspt1WmJOL\x00\x00\x00PRO_LINK_START\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'); s.sendto(pkt, ('255.255.255.255', 50000)); s.close()" 2>/dev/null || true
+    ) &
+fi
+
+
 # --- 10. the two watchers, then wait ----------------------------------------
 sh "$HERE/usb-watch.sh" start 2>/dev/null
 # Said again here, distinctly: both watchers print the byte-identical
