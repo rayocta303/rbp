@@ -31,6 +31,8 @@ unit up; it is the target document and links out to the rest.
 | 21 | [dfd-dataflow](21-dfd-dataflow.md) ([ID](21-dfd-dataflow-id.md)) | complete Data Flow Diagram (DFD): Level 0 Context, Level 1 Decomposition, Level 2 Detailed Workflows, and Data Dictionary |
 | 22 | [rbp-data-dictionary](22-rbp-data-dictionary.md) | complete technical Data Dictionary for `rbp`: ARM32 registers, ABI functions, struct layouts, global singletons, keycodes, and I/O specifications |
 | 23 | [usb-hid-pc-plan](23-usb-hid-pc-plan.md) | implementation roadmap for enabling USB-B HID/MIDI cable connection to Rekordbox PC (Hardware Unlock, Soundcard, Bidirectional HID) |
+| 24 | [ui-layering-and-vnc](24-ui-layering-and-vnc.md) | multi-plane DRM overlay layering architecture of RBP, framebuffer compositing pipeline, and two-way touch VNC mirror |
+
 
 There is no document 14: the port plan numbers the FLX4 runbook 15 and defines
 nothing at 14, so the gap is left rather than renumbered.
