@@ -41,6 +41,7 @@ int rbp_beatfx_type(void);
 int rbp_beatfx_numer(void);
 int rbp_beatfx_denom(void);
 int rbp_beatfx_on(void);
+int rbp_beatfx_channel(void);
 int rbp_is_looping(int deck);
 int rbp_is_canreloop(int deck);
 long rbp_get_playing_pos(int deck);

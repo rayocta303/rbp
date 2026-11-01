@@ -492,6 +492,11 @@ static void flx4_note(int ch, int note, int on)
            * names a position, whether that is a move or the device's own
            * state. */
           int want = (pos == 2) ? BFX_CH_MASTER : pos;
+          if (rbp_beatfx_on() > 0) {
+               send_rx_key(K_BFX, OP_PRESS, CH_GLOBAL, 0);
+               send_rx_key(K_BFX, OP_RELEASE, CH_GLOBAL, 0);
+               klog("knobshim2: FLX4 FX CH SELECT -> Auto-disabled Beat FX prior to CH switch\n");
+          }
           send_rx_key(K_BFXCH, OP_VALUE, CH_GLOBAL, want);
           klog("knobshim2: FX CH SELECT -> Beat FX target %s\n",
                pos == 2 ? "MASTER (5)" :

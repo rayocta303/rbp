@@ -1529,6 +1529,11 @@ static void fx_ch_cycle(void){
         cur = 0;
     }
     next = (cur == 0) ? 1 : (cur == 1) ? BFX_CH_MASTER : 0;
+    struct fxpad_live st;
+    if (fx_state_read(&st) && fxpad_live_on(&st)) {
+        fx_power_send();
+        pointsrc_log("pointsrc: auto-disabled beat fx prior to ch switch");
+    }
     fx_ch_send(next);
     pointsrc_log("pointsrc: beat fx ch select %d -> %s", cur,
                  next == 0 ? "deck 1" : next == 1 ? "deck 2" : "MASTER");

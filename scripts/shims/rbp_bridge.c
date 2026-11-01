@@ -90,6 +90,19 @@ int rbp_beatfx_on(void)
      return ((int (*)(void))ADDR_UIGETMIXBEATFXON)();
 }
 
+int rbp_beatfx_channel(void)
+{
+     if (!is_rbp_process())
+          return -1;
+     void *engine = *(void **)ME_SINGLETON;
+     if (!engine)
+          return -1;
+     void *bem = *(void **)((char *)engine + 0x58);
+     if (!bem)
+          return -1;
+     return *(volatile int *)bem;
+}
+
 int rbp_is_looping(int deck)
 {
      void *pe = *(void **)PLAYENGINE_GLOBAL;

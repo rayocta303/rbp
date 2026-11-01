@@ -962,6 +962,19 @@ static void flx6_event(const struct snd_seq_event *ev)
                else if (note == 20) target_ch = BFX_CH_MASTER; /* MASTER */
 
                if (target_ch >= 0) {
+                    int cur_ch = rbp_beatfx_channel();
+                    int slot_ch = flx6_slots[flx6_active_slot].channel;
+                    int changing = (cur_ch >= 0) ? (cur_ch != target_ch) : (slot_ch != target_ch);
+
+                    /* Auto-disable Beat FX if currently ON before switching channel
+                     * to avoid DSP popping and audio glitches */
+                    if (changing && rbp_beatfx_on() > 0) {
+                         send_rx_key(K_BFX, OP_PRESS, CH_GLOBAL, 0);
+                         send_rx_key(K_BFX, OP_RELEASE, CH_GLOBAL, 0);
+                         for (int s = 0; s < 6; s++) flx6_slots[s].on = 0;
+                         klog("knobshim2: FLX6 FX CH SELECT -> Auto-disabled Beat FX prior to switching ch %d -> %d\n",
+                              (cur_ch >= 0 ? cur_ch : slot_ch), target_ch);
+                    }
                     flx6_slots[flx6_active_slot].channel = target_ch;
                     send_rx_key(K_BFXCH, OP_VALUE, CH_GLOBAL, target_ch);
                     klog("knobshim2: FLX6 FX CH SELECT note%d -> ch %d (slot %d)\n",

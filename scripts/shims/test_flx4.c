@@ -249,6 +249,11 @@ int rbp_beatfx_type(void)
      return 7;
 }
 
+int rbp_beatfx_on(void)
+{
+     return 0;
+}
+
 /* The map only asks for the engine pointer while logging (verbose is 0 here), and
  * the mixer calls below are stubbed outright, so NULL is never dereferenced. */
 void *mixer_engine(void)             { return NULL; }
