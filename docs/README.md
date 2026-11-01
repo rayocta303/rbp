@@ -32,6 +32,8 @@ unit up; it is the target document and links out to the rest.
 | 22 | [rbp-data-dictionary](22-rbp-data-dictionary.md) | complete technical Data Dictionary for `rbp`: ARM32 registers, ABI functions, struct layouts, global singletons, keycodes, and I/O specifications |
 | 23 | [usb-hid-pc-plan](23-usb-hid-pc-plan.md) | implementation roadmap for enabling USB-B HID/MIDI cable connection to Rekordbox PC (Hardware Unlock, Soundcard, Bidirectional HID) |
 | 24 | [ui-layering-and-vnc](24-ui-layering-and-vnc.md) | multi-plane DRM overlay layering architecture of RBP, framebuffer compositing pipeline, and two-way touch VNC mirror |
+| 25 | [amlogic-s905x](25-amlogic-s905x.md) | **the S905X target**: Amlogic Meson GXL architecture, Armbian aarch64 setup, 32-bit EL0 Support, meson-drm display, and low-latency audio |
+| 26 | [flx6-midi](26-flx6-midi.md) | **the DDJ-FLX6 map**: 4-channel layout, 720 PPR jog, 6 Beat FX slot racks with auto-off channel switch, Merge FX, Sound Color FX |
 
 
 There is no document 14: the port plan numbers the FLX4 runbook 15 and defines

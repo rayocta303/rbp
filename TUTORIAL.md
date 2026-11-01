@@ -1,10 +1,10 @@
-# Tutorial — run `rb` on a Raspberry Pi 4B
+# Tutorial — run `rb` on Amlogic S905X or Raspberry Pi 4B
 
-End-to-end: from the extracted XDJ-RX3 assets to `rbp` running on the Pi.
-Everything targets a **Pi 4B on Pi OS Lite 32-bit (Bookworm)** with an HDMI
-monitor and a DDJ-FLX4.
+End-to-end: from the extracted XDJ-RX3 assets to `rbp` running on **Amlogic S905X (Armbian aarch64)**
+or **Raspberry Pi 4B (Pi OS Lite 32-bit)** with an HDMI monitor, touchscreen, and a
+**Pioneer DDJ-FLX6** or **DDJ-FLX4** controller.
 
-> rbpi4b does not cover firmware acquisition, decryption or keys — start from
+> This project does not cover firmware acquisition, decryption or keys — start from
 > the extracted tree described in [docs/04](docs/04-firmware-assets.md).
 
 ## 0. Prerequisites
@@ -23,33 +23,21 @@ monitor and a DDJ-FLX4.
 * **Extracted assets:** an `XDJRX3-rootfs/`, the GUI assets and `rbp-audio`
   (stock `rbp` + the shared patches). See
   [docs/04](docs/04-firmware-assets.md).
-* **The Pi:** Pi OS Lite 32-bit, booted, on the network, with root, **plus
-  `gcc`, `make` and `python3`**. Pi OS Lite ships no compiler, and `install.sh`
-  compiles `vncserve` *on the unit* — that compile is what gives you the VNC
-  viewer and its unit. Without `make`/`cc` it warns and carries on, and the
-  result is no VNC binary and no `rblive4-vnc` unit rather than a failed install.
-  `python3` is what the boot screen and the configuration page run under, and
-  that page's unit carries `ConditionPathExists=/usr/bin/python3`, so without it
-  the page is simply absent. The diagnostic tools in step 6 are single-file C and
-  want the compiler too.
+* **Target Board (Amlogic S905X or Raspberry Pi 4B):**
+  - **Amlogic S905X / S905X-W / S905L TV Box or SBC:** Running Armbian aarch64 (Linux 5.15+ kernel).
+  - **Raspberry Pi 4B:** Running Pi OS Lite 32-bit (Bookworm).
+  - Both require `gcc`, `make` and `python3`:
   ```sh
-  ssh pi@<host>
-  sudo apt-get install -y gcc make python3    # if they are not already there
+  ssh root@<host>   # or pi@<host> on Raspberry Pi
+  apt-get update && apt-get install -y gcc make python3
   ```
-  Confirm the image before anything else. What matters is that the kernel can
-  execute 32-bit ARM ELF — **not** that its name says `armv7l`, because current
-  Pi OS 32-bit images ship a 64-bit `-v8` kernel:
+  Confirm 32-bit execution compatibility on the board:
   ```sh
-  getconf LONG_BIT                     # 32   (userland)
-  dpkg --print-architecture            # armhf
-  dmesg | grep -c '32-bit EL0 Support' # 1    (the kernel can run it)
+  dmesg | grep -i '32-bit EL0'
+  # -> 32-bit EL0 Support
   ```
-  `install.sh` prints the same two facts and then tests the chroot for real, so
-  if this looks different from the above, read what it says rather than the
-  `uname` line.
-  Then follow [docs/13](docs/13-raspberrypi4.md) for the `cmdline.txt` recipe
-  (it is what makes the HDMI mode, and therefore the display, deterministic) and
-  reboot before continuing.
+  For S905X architecture details, see [docs/25 — Amlogic S905X](docs/25-amlogic-s905x.md).
+  For Pi 4 architecture details, see [docs/13 — Raspberry Pi 4](docs/13-raspberrypi4.md).
 
 ## 1. Build the patched DirectFB stack (host)
 

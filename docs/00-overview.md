@@ -1,45 +1,46 @@
 # 00 — Overview
 
-rbpi4b runs the **Pioneer DJ XDJ-RX3 standalone rekordbox player** (`rbp`,
-called `rb` internally) on a **Raspberry Pi 4B**. The XDJ-RX3 firmware builds
-its player as **soft-float ARM32**; a Pi executes soft-float EABI ELF natively —
-the same arrangement the Prime GO and SC Live 4 ports relied on. What that needs
-is 32-bit *emulation* in the kernel (`32-bit EL0`/`CONFIG_COMPAT`), not a 32-bit
-kernel, and Pi OS provides it: the measured unit runs an arm64 kernel on a 32-bit
-image and reports `32-bit EL0 Support` ([13](13-raspberrypi4.md)).
+This project runs the standalone **Pioneer DJ XDJ-RX3 rekordbox player** (`rbp`,
+called `rb` internally) on **Amlogic S905X-series TV Boxes/SBCs** and the **Raspberry Pi 4B**.
+The XDJ-RX3 firmware builds its player as **soft-float ARM32**; both Amlogic S905X (Cortex-A53)
+and Broadcom BCM2711 (Cortex-A72) execute soft-float EABI ELF natively via
+**32-bit EL0 Support** (`CONFIG_COMPAT`) in aarch64 Linux kernels (Armbian / Pi OS).
 
-There is no emulation. The real `rbp` binary from the XDJ-RX3 firmware runs
-directly, with a set of thin shims translating the Pi's hardware — HDMI
-framebuffer, USB MIDI controller, USB audio — into what `rbp` expects.
+There is no CPU emulation. The real `rbp` binary from the XDJ-RX3 firmware runs
+directly on bare metal silicon, with a set of thin shims translating standard hardware — HDMI
+framebuffer, USB MIDI controller (**DDJ-FLX6** or **DDJ-FLX4**), USB audio, and touch pointer —
+into what `rbp` expects.
 
-The target document is [13 — Raspberry Pi 4](13-raspberrypi4.md); it carries the
-image, the `cmdline.txt` recipe and the bring-up order. This chapter is the map
-of the whole thing.
+Target documents:
+- [25 — Amlogic S905X](25-amlogic-s905x.md): S905X TV Box architecture, Armbian setup, and meson-drm.
+- [13 — Raspberry Pi 4](13-raspberrypi4.md): Pi 4 image, `cmdline.txt` recipe, and vc4 setup.
+- [26 — DDJ-FLX6 MIDI](26-flx6-midi.md): 4-channel mapping, 6 Beat FX slots, Merge FX, and jog mechanics.
+- [15 — DDJ-FLX4 MIDI](15-flx4-midi.md): 2-channel mapping for DDJ-FLX4.
 
 ## The pieces
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                        Raspberry Pi 4B                              │
-│  BCM2711 · HDMI (vc4drmfb) · USB-A host · no touchscreen            │
-│  DDJ-FLX4 on USB: MIDI control surface + 4-channel USB audio        │
-│                                                                     │
-│  ┌────────────── /opt/rblive4/rbx3-run (chroot) ────────────────────┐│
-│  │  soft-float glibc 2.13 + RX3 libs + DirectFB 1.4              ││
-│  │                                                               ││
-│  │   rbp-audio  ──  the XDJ-RX3 rekordbox player                 ││
-│  │      ▲  ▲  ▲  ▲                                               ││
-│  │      │  │  │  └── netshim.so    eth0-name introspection → wlan0││
-│  │      │  │  └───── knobshim.so   DDJ-FLX4 MIDI → RX3 keycodes  ││
-│  │      │  └──────── audioshim.so  JUCE/ALSA → FLX4 USB audio    ││
-│  │      └─────────── fbshim.so     fb ioctl + evdev → tsc2007    ││
-│  │                                                               ││
-│  │   libdirectfb_fbdev.so (rebuilt) ── the present path          ││
-│  └────────────────────────────────────────────────────────────────┘│
-│        ▲              ▲                ▲               ▲           │
-│     /dev/fb0    /dev/input/eventN   MIDI "DDJ-FLX4"  /tmp/udev_usb1│
-│   (HDMI, 16bpp)   (pointer evdev)     seq port        (hotplug)    │
-└──────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│              Target Board: Amlogic S905X or Raspberry Pi 4B                │
+│  Meson GXL / BCM2711 · HDMI 1280×800 · USB-A host · USB Touch CTP         │
+│  DDJ-FLX6 or DDJ-FLX4 on USB: 4-Ch USB Audio + ALSA MIDI Sequencer         │
+│                                                                            │
+│  ┌───────────────── /opt/rblive4/rbx3-run (chroot) ───────────────────────┐│
+│  │  soft-float glibc 2.13 + RX3 libs + DirectFB 1.4.16                    ││
+│  │                                                                        ││
+│  │   rbp (XDJ-RX3 Rekordbox Standalone Player)                            ││
+│  │      ▲        ▲           ▲            ▲            ▲                  ││
+│  │      │        │           │            │            │                  ││
+│  │  netshim   knobshim   audioshim     fbshim     crashcatch              ││
+│  │  (ProDJ    (FLX6/FLX4 (ALSA S24_3LE (1280x800  (SIGSEGV guard)         ││
+│  │   Link)     MIDI Map)  Low Latency)  DirectFB)                         ││
+│  │                                                                        ││
+│  │   libdirectfb_fbdev.so (rebuilt) ── single-page fbdev direct present   ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+│         ▲            ▲               ▲                   ▲                 │
+│     wlan0/eth0   /dev/snd/seq    /dev/fb0        /dev/input/event*         │
+│    (Pro DJ Link) (FLX6/FLX4 MIDI)(HDMI 1280x800) (USB/I2C Touch CTP)      │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Why each piece is needed

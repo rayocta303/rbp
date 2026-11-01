@@ -31,7 +31,8 @@ small set of modules built into `knobshim.so`:
 | `controllers.c` / `.h` | **the controller table**: one row per surface — its map, port-name hint, card id, USB id, init and keepalive SysEx. Pure: no I/O, no globals, no clock, so `test_controllers` links it and runs it on the host. `controllers_cli.c` is the same table with a `main()` for shell callers |
 | `shimutil.c` / `.h` | `klog()`, the clock, and the environment helpers |
 | `shmstate.c` / `.h` | the globals the audio shim reads, and the contract that guards them |
-| `map_flx4.c` | the DDJ-FLX4's tables — written and fixture-tested, tables **unverified** until a dump from the unit, see [15](15-flx4-midi.md) |
+| `map_flx4.c` | the DDJ-FLX4's tables — 2-channel mapping, fixture-tested, see [15](15-flx4-midi.md) |
+| `map_flx6.c` | the **Pioneer DDJ-FLX6** tables — full 4-channel layout, 720 PPR jog, 6 Beat FX slot racks with auto-off channel switch, Merge FX, Sound Color FX slots, see [26](26-flx6-midi.md) |
 
 The split exists so that a map can exist without duplicating the rbp bridge, and
 so the bridge never learns a controller's note numbers. `CTRL_OBJS` in

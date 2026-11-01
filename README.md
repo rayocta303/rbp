@@ -1,19 +1,15 @@
-# rbpi4b
+# XDJ-RX3 Standalone rekordbox Engine (Amlogic S905X & Raspberry Pi 4B)
 
 Credit to: [![Instagram: @i.erhan.es](https://img.shields.io/badge/Instagram-%40i.erhan.es-E4405F?logo=instagram&logoColor=white)](https://instagram.com/i.erhan.es) for the original base of this code.
 
-**Run the Pioneer DJ XDJ-RX3 *rekordbox* standalone player on a Raspberry Pi 4B.**
+**Run the Pioneer DJ XDJ-RX3 *rekordbox* standalone player on Amlogic S905X TV Boxes and Raspberry Pi 4B.**
 
-rbpi4b runs the ARM32 `rekordbox` player application (`rbp`, called `rb`
-internally) extracted from **XDJ-RX3 firmware v1.20** on a **Raspberry Pi 4B**
-running **Pi OS Lite 32-bit**, with an **HDMI monitor** and a **Pioneer
-DDJ-FLX4** over USB.
+This project runs the native ARM32 `rekordbox` player application (`rbp`, called `rb`
+internally) extracted from **XDJ-RX3 firmware v1.20** on **Amlogic S905X-series TV Boxes/SBCs** (running **Armbian aarch64**) or a **Raspberry Pi 4B** (running **Pi OS Lite 32-bit**), with an **HDMI monitor / touchscreen**, and a **Pioneer DDJ-FLX6** (4-channel) or **DDJ-FLX4** (2-channel) controller over USB.
 
-The port started from a working Denon SC Live 4 port, which in turn derived from
-the Prime GO work; the differences between them are the whole reason this was
-tractable, and they are set out in [docs/13](docs/13-raspberrypi4.md).
+The port executes the real soft-float ARM32 `rbp` binary natively via kernel **32-bit EL0 Support** (`CONFIG_COMPAT`), with thin userland shims translating standard Linux display, audio, touch, and MIDI interfaces into what the Pioneer engine expects.
 
-> rbpi4b is an **interoperability / preservation** project. It contains **no
+> This repository is an **interoperability / preservation** project. It contains **no
 > Pioneer/AlphaTheta firmware, no `rbp` binary, no Denon software and no
 > rekordbox content.** You supply your own extracted assets. See
 > [NOTICE.md](NOTICE.md).
@@ -24,16 +20,17 @@ tractable, and they are set out in [docs/13](docs/13-raspberrypi4.md).
 
 | Subsystem | Detail | Doc |
 |---|---|---|
-| Display | HDMI at 1280×800 — the mode is forced via `video=` and the measured panel takes it, so the fb matches `rbp`'s 1280×800×16 RGB565 surface exactly: no scaling, no bars, no crop | [docs/06](docs/06-display.md), [docs/13](docs/13-raspberrypi4.md) |
-| Pointing | No touchscreen on a monitor: an evdev pointer (touch panel or mouse) is discovered by capability and transformed into the tsc2007 protocol `rbp` reads — including `rbp`'s own `1279 - x` reflection of that protocol's x, undone in the shim so a tap lands under the finger | [docs/07](docs/07-touch.md) |
-| Controls | transport, decks, mixer, jog and pads mapped from the DDJ-FLX4 MIDI surface — the tables are written from Pioneer's published MIDI message list and are unverified until a dump from the hardware, see [docs/15](docs/15-flx4-midi.md) | [docs/08](docs/08-controls.md), [docs/15](docs/15-flx4-midi.md) |
-| Panel LEDs | PLAY / CUE / SYNC / FX LEDs mirror rbp's own LED state (blink included) | [docs/08](docs/08-controls.md) |
-| VU meters | The FLX4's two channel level meters, driven from rbp's own meter as a CC value ramp (not the SC Live 4's segment bitmask); `RB_LED_VU` (default `1`) is a manual OFF switch | [docs/15](docs/15-flx4-midi.md) |
-| Audio | master (RCA out) and headphones/cue on the FLX4's 4-channel USB audio, **plus the same master audio out of the Pi's HDMI**; card, channel count and pair map are all configurable | [docs/09](docs/09-audio.md) |
-| USB | rekordbox-exported stick detection and `export.pdb` import into DeviceSQL | [docs/10](docs/10-usb.md) |
-| Launcher | `start-rb.sh` stops the desktop services that would fight for the display or the stick, then brings the player up | [docs/11](docs/11-runtime-launcher.md) |
-| Boot time | `install.sh` applies a reversible boot trim — cloud-init off the critical chain, the apt timers off the boot path, the launcher's no-op `systemctl` calls behind read-only guards, and the unit ordered at `basic.target` instead of after `multi-user.target` | [docs/13](docs/13-raspberrypi4.md#boot-time) |
-| Access | plain root on Pi OS — none of the previous target's overlay/SSH workarounds are needed | [docs/13](docs/13-raspberrypi4.md) |
+| Target Boards | **Amlogic S905X** (Meson GXL TV boxes / SBCs) and **Raspberry Pi 4B** (BCM2711) | [docs/25](docs/25-amlogic-s905x.md), [docs/13](docs/13-raspberrypi4.md) |
+| Display | HDMI at 1280×800 — native XDJ-RX3 resolution, 16/32 bpp, zero scaling/distortion | [docs/06](docs/06-display.md), [docs/24](docs/24-ui-layering-and-vnc.md) |
+| Controllers | **Pioneer DDJ-FLX6** (4-Ch, 6 Beat FX racks, 720 PPR jog, Merge FX, CFX) and **DDJ-FLX4** (2-Ch) | [docs/26](docs/26-flx6-midi.md), [docs/15](docs/15-flx4-midi.md) |
+| Touch / Pointing | Evdev pointer (USB capacitive touch panels like `wch.cn USB2IIC_CTP_CONTROL`, Goodix, or mouse) translated into emulated tsc2007 protocol | [docs/07](docs/07-touch.md) |
+| Beat FX Auto-Off | Automatically disables Beat FX prior to channel switch to prevent DSP audio popping/glitches | [docs/26](docs/26-flx6-midi.md) |
+| Panel LEDs & VUs | Full LED mirror (Play/Cue/Sync/FX blink) and hardware CC channel level meters | [docs/08](docs/08-controls.md), [docs/26](docs/26-flx6-midi.md) |
+| Audio Engine | Low-latency 4-channel USB Audio (`S24_3LE`), Master RCA Out + Headphone/Cue Out + advisory HDMI Audio Mirroring | [docs/09](docs/09-audio.md) |
+| Pro DJ Link | `netshim.so`: automatic Wi-Fi/Ethernet link broadcast on boot; TUI network traffic monitor included | [docs/18](docs/18-prodjlink.md) |
+| Remote VNC & Web | Zero-copy VNC mirror (`vncserve`) and LAN web configuration dashboard (`confscreen.py` on port 5904) | [docs/19](docs/19-vnc.md), [docs/20](docs/20-config-page.md) |
+| USB Media | rekordbox-exported USB flash drive auto-mounting and DeviceSQL database import | [docs/10](docs/10-usb.md) |
+| Systemd Launcher | `start-rb.sh` manages chroot, handles hardware hotplug, and provides atomic failover | [docs/11](docs/11-runtime-launcher.md) |
 
 ## State of the port
 

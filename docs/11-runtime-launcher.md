@@ -388,3 +388,40 @@ rbp draws, so `always` would relaunch it and paint over the live player.
 `RB_BOOTSCREEN=0` (or `RB_AUTOSTART=0`, which it follows) installs the unit but
 leaves it disabled, and `doctor.sh` reports each way it can look installed and not
 work.
+
+## Pro DJ Link Auto-Trigger
+
+`start-rb.sh` automatically engages Pro DJ Link over Wi-Fi (`wlan0`) or Ethernet (`eth0`) once `rbp`'s `udev_usb1` FIFO is detected:
+```sh
+# Trigger Pro DJ Link connect upon rbp readiness
+sleep 1.5
+printf %s connect > /tmp/udev_usb1 2>/dev/null || true
+touch /tmp/rb_link.req 2>/dev/null || true
+```
+This causes `rbp`'s `DeviceSQL` engine to awaken its network listener, bind UDP ports `50000`, `50001`, and `50002`, and announce its presence to Rekordbox on host PC/Mac or networked CDJ/XDJ units without manual intervention.
+
+## Multi-Target Hardware & Controller Profiles
+
+`start-rb.sh` automatically reads configuration from `/opt/rblive4/rb.conf` and detects connected hardware:
+
+### Target Board Profiles
+- **Amlogic S905X (Armbian aarch64)**:
+  - Framebuffer: `meson-drm` (/dev/fb0 forced at 1280×800)
+  - Touch input: `/dev/input/event1` (`wch.cn USB2IIC_CTP_CONTROL` or USB HID touch)
+  - Rootfs chroot: `/opt/rblive4/rbx3-run`
+- **Raspberry Pi 4B (Pi OS Lite 32-bit)**:
+  - Framebuffer: `vc4drmfb` (forced via `video=HDMI-A-1:1280x800@60`)
+  - Audio: USB Audio + HDMI Mirroring
+
+### Supported Controller Profiles
+- **Pioneer DDJ-FLX6**:
+  - `AUDIO_DEV=hw:CARD=DDJFLX6,DEV=0`
+  - `MIDI_MAP=flx6` (4 channels, 6 Beat FX racks, 720 PPR jog, Sound Color FX)
+- **Pioneer DDJ-FLX4**:
+  - `AUDIO_DEV=hw:CARD=DDJFLX4,DEV=0`
+  - `MIDI_MAP=flx4` (2 channels, Smart Fader, Beat FX selector)
+- **Denon SC Live 4 / Prime GO**:
+  - `MIDI_MAP=jp21` (integrated standalone surface)
+- **Keyboard Fallback**:
+  - `MIDI_MAP=kbd` (USB keyboard evdev keys)
+
