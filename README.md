@@ -32,6 +32,43 @@ The port executes the real soft-float ARM32 `rbp` binary natively via kernel **3
 | USB Media | rekordbox-exported USB flash drive auto-mounting and DeviceSQL database import | [docs/10](docs/10-usb.md) |
 | Systemd Launcher | `start-rb.sh` manages chroot, handles hardware hotplug, and provides atomic failover | [docs/11](docs/11-runtime-launcher.md) |
 
+## Provenance & Attribution
+
+This project is an extended standalone port built upon **[salesforcedoc/rbpi4b](https://github.com/salesforcedoc/rbpi4b)** by `@i.erhan.es`. The original upstream project proved the viability of running the soft-float ARM32 XDJ-RX3 player on the Raspberry Pi 4B with a 2-channel DDJ-FLX4.
+
+This repository expands and adapts the architecture to broader hardware ecosystems (low-cost Amlogic TV boxes) and 4-channel controller surfaces.
+
+## Key Enhancements in this Port (vs Upstream)
+
+Unlike the original upstream baseline, this port includes significant architectural enhancements and hardware support:
+
+1. **Amlogic S905X-Series Target Board Support**:
+   - Native support for low-cost ($15–$30) Amlogic Meson GXL / G12A TV Boxes and SBCs under Armbian aarch64 (Linux 5.15+).
+   - DirectFB integration over `meson-drm` (/dev/fb0 forced at native 1280×800).
+   - Out-of-the-box USB Capacitive Touch Panel (CTP) driver integration (`wch.cn USB2IIC_CTP_CONTROL`, Goodix, etc.).
+   - Detailed bring-up guide in [docs/25 — Amlogic S905X](docs/25-amlogic-s905x.md).
+
+2. **Full Pioneer DDJ-FLX6 (4-Channel) Controller Support**:
+   - Dedicated controller map (`scripts/shims/map_flx6.c`, `MIDI_MAP=flx6`).
+   - 4-channel mixer strips with Deck 1/2 mirroring for multi-layer mixing.
+   - Calibrated 720 PPR jog wheels with vinyl touch surface and pitch-bend responsiveness.
+   - 6 Beat FX Slot Racks (FX1 Slots 1–3, FX2 Slots 1–3) with dedicated level & parameter mapping.
+   - Merge FX rotary and push button mapped to Beat FX Depth & Engage.
+   - Sound Color FX quick-select slots via `SHIFT` + `CUE 1–4` (Filter, Dub Echo, Noise, Space).
+   - Detailed mapping guide in [docs/26 — DDJ-FLX6 MIDI](docs/26-flx6-midi.md).
+
+3. **Beat FX DSP Anti-Glitch Protection**:
+   - Automatically detects and disengages active Beat FX (`rbp_beatfx_on() > 0`) before channel (`K_BFXCH`) or slot switches.
+   - Resets DSP delay/reverb buffers cleanly, completely eliminating audio pops, clicks, and phase corruption when switching channels during a live performance.
+
+4. **Pro DJ Link Auto-Trigger & Monitoring**:
+   - Automated wake-up and connect trigger during boot once `rbp`'s `udev_usb1` FIFO opens.
+   - Binds UDP ports 50000, 50001, and 50002 automatically over Wi-Fi (`wlan0`) or Ethernet (`eth0`).
+   - Includes a standalone terminal UI traffic monitor tool ([`tools/prodjlink_monitor.py`](tools/prodjlink_monitor.py) and [`tools/run_monitor.bat`](tools/run_monitor.bat)) with live peer detection and zero-scroll packet tracing.
+
+5. **Multi-Plane DRM Layering Architecture Documentation**:
+   - Comprehensive technical documentation explaining RBP DirectFB rendering, hardware DRM plane compositing, and zero-copy VNC video pipeline in [docs/24 — UI Layering and VNC](docs/24-ui-layering-and-vnc.md).
+
 ## State of the port
 
 **It runs on the hardware.** `rbp` has been launched on the measured Pi 4 and
