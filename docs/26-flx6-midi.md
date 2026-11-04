@@ -148,10 +148,10 @@ Each deck features 8 velocity-sensitive pads:
 | **Beat Jump (< / >)** | Jump 1 Beat backward / forward | Jump 4 / 8 Beats |
 | **Loop In / Out** | Manual 4-Beat Loop / Reloop | Exit Loop / Slot Save |
 | **Deck 3/4 Toggle** | Dual Deck Control | Slip Mode Toggle (`K_SLIP`) |
-| **Browse Push** | Load selected track | Open SOURCE screen (`K_SOURCE`) |
-| **SHIFT + LOAD 1** | Open Utility / Settings (`K_MENU` held 500ms) | — |
+| **Browse Push** | Load selected track (di Browse); Buka Browser (`K_BACK`, di Waveform) | Open SOURCE screen (`K_SOURCE`) |
+| **SHIFT + LOAD 1** | Toggle Track Filter side drawer (`K_TRACKFILTER`) | — |
 | **SHIFT + LOAD 2** | Toggle Shortcut popup | — |
-| **SHIFT + LOAD 3** | Toggle MIDI / Device View | — |
+| **SHIFT + LOAD 3** | Toggle Menu Utility / Settings (`K_MENU` held 500ms / `K_BACK`) | — |
 
 ---
 

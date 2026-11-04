@@ -112,9 +112,9 @@
 #define N_LOAD2             71  /* LOAD deck 2 */
 #define N_LOAD3             72  /* LOAD deck 3 */
 #define N_LOAD4             73  /* LOAD deck 4 */
-#define N_LOAD1_SHIFT       88  /* SHIFT + LOAD 1 -> UTILITY / Setting */
+#define N_LOAD1_SHIFT       88  /* SHIFT + LOAD 1 -> TRACK FILTER (K_TRACKFILTER) */
 #define N_LOAD2_SHIFT       89  /* SHIFT + LOAD 2 -> SHORTCUT */
-#define N_LOAD3_SHIFT       90  /* SHIFT + LOAD 3 -> Open / Toggle MIDI / SOURCE view */
+#define N_LOAD3_SHIFT       90  /* SHIFT + LOAD 3 -> Buka / Tutup Menu UTILITY / Settings (K_MENU) */
 #define N_MASTER_CUE        99  /* MASTER CUE */
 
 /* ---- Beat FX notes (channels 4 & 5) ---- */
@@ -738,9 +738,9 @@ static void flx6_build(void)
      add_note(CH_MIX, N_LOAD4, K_LOAD, 2);
 
      /* Shift + Load shortcuts */
-     /* SHIFT + LOAD 1 (note 88) is handled in flx6_event() to toggle UTILITY / Setting */
+     add_note_repeat(CH_MIX, N_LOAD1_SHIFT, K_TRACKFILTER, CH_GLOBAL);
      add_note(CH_MIX, N_LOAD2_SHIFT, K_SHORTCUT, CH_GLOBAL);
-     add_note(CH_MIX, N_LOAD3_SHIFT, K_SOURCE, CH_GLOBAL);
+     /* SHIFT + LOAD 3 (note 90 / 96) is handled in flx6_event() to toggle UTILITY / Settings */
 
      /* 1-5L/R Shift + Deck -> SLIP mode toggle (Deck 1 / Left & Deck 2 / Right) */
      add_note(CH_MIX, N_DECK_L_SHIFT, K_SLIP, 1);
@@ -1218,23 +1218,40 @@ static void flx6_event(const struct snd_seq_event *ev)
                return;
           }
 
-          /* SHIFT + LOAD 1 (note 88 on CH_MIX) -> Buka / Tutup Menu UTILITY */
-          if (ch == CH_MIX && note == N_LOAD1_SHIFT) {
+          /* Browse knob push (Encoder click):
+           * Jika di tampilan waveform (BROWSE_MODE_PLAY == 1), buka browser (seperti tombol BACK).
+           * Jika di tampilan lain (Browse list, Utility, dll), biarkan K_SELECTOR bekerja normal. */
+          if (ch == CH_MIX && note == N_BROWSE_PUSH) {
+               static int enc_pressed_in_play = 0;
+               if (on) {
+                    int mode = 0;
+                    if (is_rbp_process()) {
+                         mode = *(volatile int *)(uintptr_t)(UIBROWSE_GLOBAL + UIBROWSE_OFF_MODE);
+                    }
+                    if (mode == BROWSE_MODE_PLAY) {
+                         enc_pressed_in_play = 1;
+                         send_rx_key(K_BACK, OP_PRESS, CH_GLOBAL, 0);
+                         send_rx_key(K_BACK, OP_RELEASE, CH_GLOBAL, 0);
+                         klog("knobshim2: FLX6 Browse Push on waveform (mode %d) -> K_BACK to open Browser\n", mode);
+                         return;
+                    }
+                    enc_pressed_in_play = 0;
+               } else {
+                    if (enc_pressed_in_play) {
+                         enc_pressed_in_play = 0;
+                         return;
+                    }
+               }
+               /* Jatuh ke table notes jika bukan di mode waveform (K_SELECTOR) */
+          }
+
+          /* SHIFT + LOAD 3 (note 96 from hardware, or note 90) -> Buka / Tutup Menu UTILITY / Settings */
+          if (ch == CH_MIX && (note == 96 || note == N_LOAD3_SHIFT)) {
                if (on) {
                     pthread_t th;
                     pthread_create(&th, NULL, flx6_trigger_settings, NULL);
                     pthread_detach(th);
-                    klog("knobshim2: FLX6 SHIFT+LOAD 1 -> Toggle Menu UTILITY\n");
-               }
-               return;
-          }
-
-          /* SHIFT + LOAD 3 (note 96 from hardware, or note 90) -> Open / Toggle MIDI / SOURCE view */
-          if (ch == CH_MIX && (note == 96 || note == N_LOAD3_SHIFT)) {
-               if (on) {
-                    send_rx_key(K_SOURCE, OP_PRESS, CH_GLOBAL, 0);
-                    send_rx_key(K_SOURCE, OP_RELEASE, CH_GLOBAL, 0);
-                    klog("knobshim2: FLX6 SHIFT+LOAD 3 (note %d) -> Open / Toggle MIDI / SOURCE view (K_SOURCE 0x%04x)\n", note, K_SOURCE);
+                    klog("knobshim2: FLX6 SHIFT+LOAD 3 (note %d) -> Toggle Menu UTILITY / Settings (K_MENU)\n", note);
                }
                return;
           }
