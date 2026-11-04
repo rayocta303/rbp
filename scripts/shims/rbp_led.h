@@ -32,5 +32,7 @@ extern int led_sweep;
  * are in different modules. */
 extern int led_loop_armed[2];
 
+void rbp_led_invalidate_deck(int deck);
+
 #endif /* RBPI4B_RBP_LED_H */
 

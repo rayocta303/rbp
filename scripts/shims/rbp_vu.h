@@ -42,5 +42,7 @@ extern int g_fader_seen[3];   /* set once a surface has reported a fader */
  * clamped to 0..1023. */
 void fader_state_set(int ch, int v);
 
+void rbp_vu_invalidate_channel(int m);
+
 #endif /* RBPI4B_RBP_VU_H */
 

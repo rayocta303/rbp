@@ -1,3 +1,10 @@
+static int vu_last_c[3] = { -1, -1, -1 };
+
+void rbp_vu_invalidate_channel(int m)
+{
+     if (m >= 1 && m <= 2) vu_last_c[m] = -1;
+}
+
 /*
  * rbp_vu.c -- the meter bridge.
  *
@@ -283,7 +290,6 @@ void *vu_thread(void *arg)
 {
      unsigned long t = 0;
      int last_l = -1, last_r = -1;
-     int last_c[3] = { -1, -1, -1 };
      int vu_test, vu_debug;
      (void)arg;
      if (!is_rbp_process())
@@ -442,12 +448,12 @@ void *vu_thread(void *arg)
                                      : vu_channel_segments(g_meter_bits[m],
                                                            g_fader[m],
                                                            vu_leds->meter_pre_fader));
-               if (v != last_c[m]) {
+               if (v != vu_last_c[m]) {
                     int ch_target = vu_leds->meter_ch_fn ? vu_leds->meter_ch_fn(m)
                                                          : (vu_leds->meter_ch_first + (m - 1));
                     int ok = (ch_target >= 0) ? midi_cc(ch_target, vu_leds->n_meter_cc, v) : 0;
                     if (ok)
-                         last_c[m] = v;
+                         vu_last_c[m] = v;
                     if (m == 1) {       /* what deck 1's meter was told */
                          vu_sent = ok;
                          vu_sent_v = v;
@@ -465,7 +471,7 @@ void *vu_thread(void *arg)
                     "sent[master=%d/%d ch=%d/%d] fader=%d/%d seen=%d/%d "
                     "steps=%d enc=%d cc=%d/%d wire=%d/%s\n",
                     g_meter_bits[0], g_meter_bits[1], g_meter_bits[2],
-                    last_l, last_r, last_c[1], last_c[2],
+                    last_l, last_r, vu_last_c[1], vu_last_c[2],
                     g_fader[1], g_fader[2], g_fader_seen[1], g_fader_seen[2],
                     test_steps, vu_leds->meter_enc,
                     vu_leds->n_meter_cc, vu_leds->meter_ch_first,

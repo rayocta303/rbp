@@ -42,6 +42,7 @@
 #include "rbp_abi.h"
 #include "rbp_bridge.h"
 #include "rbp_vu.h"
+#include "rbp_led.h"
 #include "pitch_state.h"
 #include "ctrl_map.h"
 #include "midi_io.h"
@@ -190,6 +191,68 @@ static void *flx6_trigger_settings(void *arg)
 static int tempo_rev = 0;
 
 #define BFX_TYPE_POSITIONS 14
+
+/* ---- Deck Layer state ----
+ * Left side:  CH_DECK1 (0) = Deck 1, CH_DECK3 (2) = Deck 3 -> Target Player 1 (sch 1)
+ * Right side: CH_DECK2 (1) = Deck 2, CH_DECK4 (3) = Deck 4 -> Target Player 2 (sch 2) */
+static int flx6_deck_layer[2] = { CH_DECK1, CH_DECK2 };
+static int last_bfx_ch_led = -1;
+static int flx6_shift_held[2] = { 0, 0 };
+static unsigned long long flx6_last_slip_ms[2] = { 0, 0 };
+
+struct flx6_knob_state {
+     uint16_t trim[4];
+     uint16_t eqh[4];
+     uint16_t eqm[4];
+     uint16_t eql[4];
+     uint16_t fader[4];
+     uint16_t cfx[4];
+     uint16_t xfader;
+     uint16_t hpmix;
+     uint16_t hplevel;
+     uint16_t masterlvl;
+};
+
+static struct flx6_knob_state flx6_knobs = {
+     .trim = { 512, 512, 512, 512 },
+     .eqh = { 512, 512, 512, 512 },
+     .eqm = { 512, 512, 512, 512 },
+     .eql = { 512, 512, 512, 512 },
+     .fader = { 1023, 1023, 1023, 1023 },
+     .cfx = { 512, 512, 512, 512 },
+     .xfader = 512,
+     .hpmix = 512,
+     .hplevel = 1023,
+     .masterlvl = 1023
+};
+static int flx6_knobs_dirty = 0;
+static unsigned long long flx6_knobs_last_save = 0;
+
+static void flx6_load_knobs_state(void)
+{
+     const char *path = "/run/rblive4/flx6_knobs.state";
+     FILE *f = fopen(path, "rb");
+     if (!f) {
+          path = "/opt/rblive4/flx6_knobs.state";
+          f = fopen(path, "rb");
+     }
+     if (f) {
+          if (fread(&flx6_knobs, sizeof(flx6_knobs), 1, f) == 1) {
+               klog("knobshim2: FLX6 loaded persistent knob state from %s\n", path);
+          }
+          fclose(f);
+     }
+}
+
+static void flx6_save_knobs_state(void)
+{
+     const char *path = "/run/rblive4/flx6_knobs.state";
+     FILE *f = fopen(path, "wb");
+     if (f) {
+          fwrite(&flx6_knobs, sizeof(flx6_knobs), 1, f);
+          fclose(f);
+     }
+}
 
 struct jog_ctrl {
      int rch;
@@ -595,6 +658,16 @@ static void flx6_cc_abs(int ch, int cc, int val)
           int key = abs_map[i].key;
           int sch = abs_map[i].sch;
           float fval = (float)v / 1023.0f;
+
+          /* Track knob state for persistence across reboots & deck switching */
+          if (ch >= 0 && ch <= 3) {
+               if (key == K_TRIM) { flx6_knobs.trim[ch] = v; flx6_knobs_dirty = 1; }
+               else if (key == K_EQH) { flx6_knobs.eqh[ch] = v; flx6_knobs_dirty = 1; }
+               else if (key == K_EQM) { flx6_knobs.eqm[ch] = v; flx6_knobs_dirty = 1; }
+               else if (key == K_EQL) { flx6_knobs.eql[ch] = v; flx6_knobs_dirty = 1; }
+               else if (key == K_FADER) { flx6_knobs.fader[ch] = v; flx6_knobs_dirty = 1; }
+          }
+
           if (key == K_FADER && sch >= 1 && sch <= 2) {
                g_fader[sch] = v;
                g_fader_seen[sch] = 1;
@@ -820,34 +893,37 @@ static unsigned char flx6_ring_pos[2] = {0, 0};
 
 static void flx6_update_jog_ring(void)
 {
-     for (int d = 0; d < 2; d++) {
+     for (int side = 0; side < 2; side++) {
+          int d = side; /* rbp player 0 or 1 */
+          int active_deck = flx6_deck_layer[side];
+          int cc = (active_deck == CH_DECK1) ? 0 :
+                   (active_deck == CH_DECK2) ? 1 :
+                   (active_deck == CH_DECK3) ? 2 : 3;
+
           if (!rbp_is_loaded(d)) {
-               if (flx6_ring_pos[d] != 0) {
-                    flx6_ring_pos[d] = 0;
-                    midi_cc(11, d, 0);
+               if (flx6_ring_pos[side] != 0) {
+                    flx6_ring_pos[side] = 0;
+                    midi_cc(11, cc, 0);
                }
                continue;
           }
 
           int at_end = rbp_has_arrived_at_end(d);
-          if (at_end) {
-               /* Stop advancing at end of track */
-               continue;
-          }
+          if (at_end) continue;
 
           long pos = rbp_get_playing_pos(d);
 
           /* 33.33 RPM standard: 1 rev = 1.8 seconds = 79,380 samples @ 44.1 kHz.
-           * 72 LEDs on DDJ-FLX6 ring. */
+           * 72 LEDs on DDJ-FLX6 ring. CC 0=Deck 1, 1=Deck 2, 2=Deck 3, 3=Deck 4 on Ch 11 (0xBB). */
           long p = pos % 79380;
           if (p < 0) p += 79380;
           int led = (int)((double)p * 72.0 / 79380.0) + 1;
           if (led < 1) led = 1;
           if (led > 72) led = 72;
 
-          if (led != (int)flx6_ring_pos[d]) {
-               flx6_ring_pos[d] = (unsigned char)led;
-               midi_cc(11, d, flx6_ring_pos[d]);
+          if (led != (int)flx6_ring_pos[side]) {
+               flx6_ring_pos[side] = (unsigned char)led;
+               midi_cc(11, cc, flx6_ring_pos[side]);
           }
      }
 }
@@ -870,14 +946,6 @@ static void flx6_update_beat_fraction_led(void)
      }
 }
 
-/* ---- Deck Layer state ----
- * Left side:  CH_DECK1 (0) = Deck 1, CH_DECK3 (2) = Deck 3 -> Target Player 1 (sch 1)
- * Right side: CH_DECK2 (1) = Deck 2, CH_DECK4 (3) = Deck 4 -> Target Player 2 (sch 2) */
-static int flx6_deck_layer[2] = { CH_DECK1, CH_DECK2 };
-static int last_bfx_ch_led = -1;
-static int flx6_shift_held[2] = { 0, 0 };
-static unsigned long long flx6_last_slip_ms[2] = { 0, 0 };
-
 int flx6_get_deck_channel(int deck)
 {
      if (deck == 0) return flx6_deck_layer[0];
@@ -899,6 +967,13 @@ int flx6_get_meter_channel(int m)
      return -1;
 }
 
+int flx6_get_strip_channel(int m)
+{
+     if (m == 0) return flx6_deck_layer[0];
+     if (m == 1) return flx6_deck_layer[1];
+     return -1;
+}
+
 static void flx6_update_bfx_channel_led(void)
 {
      int cur_ch = rbp_beatfx_channel();
@@ -911,6 +986,10 @@ static void flx6_update_bfx_channel_led(void)
           want_note = (flx6_deck_layer[1] == CH_DECK2) ? 29 : 31; /* CH2 or CH4 */
      } else if (cur_ch == BFX_CH_MASTER) {
           want_note = 20; /* MASTER */
+     }
+
+     if (flx6_slots[flx6_active_slot].channel != cur_ch) {
+          flx6_slots[flx6_active_slot].channel = cur_ch;
      }
 
      if (want_note != last_bfx_ch_led) {
@@ -960,9 +1039,32 @@ static void flx6_switch_deck(int side, int new_layer)
      int old_pad_ch = (side == 0) ? ((old_layer == CH_DECK1) ? CH_PADS1 : CH_PADS3)
                                   : ((old_layer == CH_DECK2) ? CH_PADS2 : CH_PADS4);
 
+     /* 1. Clear old deck buttons, pads, and jog ring LEDs */
      flx6_clear_channel_leds(old_layer, old_pad_ch);
+     int old_ring_cc = (old_layer == CH_DECK1) ? 0 :
+                       (old_layer == CH_DECK2) ? 1 :
+                       (old_layer == CH_DECK3) ? 2 : 3;
+     midi_cc(11, old_ring_cc, 0);
+     flx6_ring_pos[side] = 0;
+
+     /* 2. Switch active layer */
      flx6_deck_layer[side] = new_layer;
      midi_note(new_layer, N_DECK_STATE, 0x7F);
+
+     /* 3. Invalidate LED & VU state caches so newly active deck LEDs light up immediately */
+     rbp_led_invalidate_deck(side);
+     rbp_vu_invalidate_channel(side + 1);
+
+     /* 4. Apply Strip controls of new_layer directly to Player (sch = side + 1) */
+     int sch = side + 1;
+     send_rx_key_f(K_TRIM, OP_VALUE, sch, flx6_knobs.trim[new_layer], (float)flx6_knobs.trim[new_layer] / 1023.0f);
+     send_rx_key_f(K_EQH, OP_VALUE, sch, flx6_knobs.eqh[new_layer], (float)flx6_knobs.eqh[new_layer] / 1023.0f);
+     send_rx_key_f(K_EQM, OP_VALUE, sch, flx6_knobs.eqm[new_layer], (float)flx6_knobs.eqm[new_layer] / 1023.0f);
+     send_rx_key_f(K_EQL, OP_VALUE, sch, flx6_knobs.eql[new_layer], (float)flx6_knobs.eql[new_layer] / 1023.0f);
+     send_rx_key_f(K_FADER, OP_VALUE, sch, flx6_knobs.fader[new_layer], (float)flx6_knobs.fader[new_layer] / 1023.0f);
+     send_rx_key_f(K_COLOR, OP_VALUE, sch, flx6_knobs.cfx[new_layer], (float)flx6_knobs.cfx[new_layer] / 1023.0f);
+     g_fader[sch] = flx6_knobs.fader[new_layer];
+     me_set_channel_fader(side, (float)flx6_knobs.fader[new_layer] / 1023.0f);
 
      klog("knobshim2: FLX6 %s Deck switched: Deck %d -> Deck %d (Target Player %d, Mixer + Jog + Pads shifted)\n",
           (side == 0) ? "Left" : "Right", old_layer + 1, new_layer + 1, side + 1);
@@ -981,14 +1083,29 @@ static void flx6_startup(void)
      send_rx_key(K_FILTER, OP_RELEASE, 1, 0);
      send_rx_key(K_FILTER, OP_PRESS, 2, 0);
      send_rx_key(K_FILTER, OP_RELEASE, 2, 0);
-     send_rx_key_f(K_COLOR, OP_VALUE, 1, 512, 0.5f);
-     send_rx_key_f(K_COLOR, OP_VALUE, 2, 512, 0.5f);
-     klog("knobshim2: Sound Color FX initialized to Filter on Ch1 & Ch2\n");
-
-     send_rx_key_f(K_MASTERLVL, OP_VALUE, CH_GLOBAL, 1023, 1.0f);
-     klog("knobshim2: master level set to unity\n");
 
      flx6_load_fx_config();
+     flx6_load_knobs_state();
+
+     /* Seed all mixer knobs and faders into RBP immediately upon startup */
+     for (int side = 0; side < 2; side++) {
+          int sch = side + 1;
+          int layer = flx6_deck_layer[side];
+          send_rx_key_f(K_TRIM, OP_VALUE, sch, flx6_knobs.trim[layer], (float)flx6_knobs.trim[layer] / 1023.0f);
+          send_rx_key_f(K_EQH, OP_VALUE, sch, flx6_knobs.eqh[layer], (float)flx6_knobs.eqh[layer] / 1023.0f);
+          send_rx_key_f(K_EQM, OP_VALUE, sch, flx6_knobs.eqm[layer], (float)flx6_knobs.eqm[layer] / 1023.0f);
+          send_rx_key_f(K_EQL, OP_VALUE, sch, flx6_knobs.eql[layer], (float)flx6_knobs.eql[layer] / 1023.0f);
+          send_rx_key_f(K_FADER, OP_VALUE, sch, flx6_knobs.fader[layer], (float)flx6_knobs.fader[layer] / 1023.0f);
+          send_rx_key_f(K_COLOR, OP_VALUE, sch, flx6_knobs.cfx[layer], (float)flx6_knobs.cfx[layer] / 1023.0f);
+          g_fader[sch] = flx6_knobs.fader[layer];
+          g_fader_seen[sch] = 1;
+          me_set_channel_fader(side, (float)flx6_knobs.fader[layer] / 1023.0f);
+     }
+     send_rx_key_f(K_MASTERLVL, OP_VALUE, CH_GLOBAL, flx6_knobs.masterlvl, 1.0f);
+     send_rx_key_f(K_XFADER, OP_VALUE, CH_GLOBAL, flx6_knobs.xfader, (float)flx6_knobs.xfader / 1023.0f);
+     send_rx_key_f(K_HPMIX, OP_VALUE, CH_GLOBAL, flx6_knobs.hpmix, (float)flx6_knobs.hpmix / 1023.0f);
+     send_rx_key_f(K_HPLEVEL, OP_VALUE, CH_GLOBAL, flx6_knobs.hplevel, (float)flx6_knobs.hplevel / 1023.0f);
+     klog("knobshim2: FLX6 startup: seeded all Trim, EQs, Faders, CFX, Master, HP into RBP\n");
 
      flx6_deck_layer[0] = CH_DECK1;
      flx6_deck_layer[1] = CH_DECK2;
@@ -1350,8 +1467,18 @@ static void flx6_event(const struct snd_seq_event *ev)
                return;
           }
 
-          /* Sound Color FX on CH_MIX: route exclusively to active deck */
+          /* Sound Color FX & Global Mixer CC tracking on CH_MIX */
           if (ch == CH_MIX) {
+               int v10 = cc_to_10bit(val);
+               if (cc == CC_CFX1) { flx6_knobs.cfx[0] = v10; flx6_knobs_dirty = 1; }
+               else if (cc == CC_CFX2) { flx6_knobs.cfx[1] = v10; flx6_knobs_dirty = 1; }
+               else if (cc == CC_CFX3) { flx6_knobs.cfx[2] = v10; flx6_knobs_dirty = 1; }
+               else if (cc == CC_CFX4) { flx6_knobs.cfx[3] = v10; flx6_knobs_dirty = 1; }
+               else if (cc == CC_XFADER) { flx6_knobs.xfader = v10; flx6_knobs_dirty = 1; }
+               else if (cc == CC_HP_MIX) { flx6_knobs.hpmix = v10; flx6_knobs_dirty = 1; }
+               else if (cc == CC_HP_LEVEL) { flx6_knobs.hplevel = v10; flx6_knobs_dirty = 1; }
+
+               /* Route Sound Color FX exclusively to active deck */
                if (cc == CC_CFX1 && flx6_deck_layer[0] != CH_DECK1) return;
                if (cc == CC_CFX3 && flx6_deck_layer[0] != CH_DECK3) return;
                if (cc == CC_CFX2 && flx6_deck_layer[1] != CH_DECK2) return;
@@ -1407,6 +1534,16 @@ static void flx6_tick(void)
      flx6_check_fx_config();
      flx6_sync_crossfader();
 
+     /* Periodic flush of persistent knob state */
+     if (flx6_knobs_dirty) {
+          unsigned long long now_ms = shim_now_ms();
+          if (now_ms - flx6_knobs_last_save >= 2000) {
+               flx6_knobs_last_save = now_ms;
+               flx6_knobs_dirty = 0;
+               flx6_save_knobs_state();
+          }
+     }
+
      /* Sync active slot FX type if changed on rbp screen */
      int cur_t = rbp_beatfx_type();
      if (cur_t > 0 && cur_t < 15 && bfx_type_to_pos[cur_t] >= 0) {
@@ -1452,6 +1589,7 @@ static const struct led_notes flx6_leds = {
      .deck_ch_fn = flx6_get_deck_channel,
      .pad_ch_fn = flx6_get_pad_channel,
      .meter_ch_fn = flx6_get_meter_channel,
+     .strip_ch_fn = flx6_get_strip_channel,
 
      .n_mode = { 27, 30, 32, 34 },
 

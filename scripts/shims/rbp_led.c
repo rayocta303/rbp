@@ -666,7 +666,8 @@ static void led_refresh(void)
           int cue = me_get_cue(m);
           if (cue < 0)
                continue;
-          led_send_run(n->strip_ch_first + m, 1, n->n_strip_cue,
+          int ch = n->strip_ch_fn ? n->strip_ch_fn(m) : (n->strip_ch_first + m);
+          led_send_run(ch, 1, n->n_strip_cue,
                        &led_pfl_last[m], cue);
      }
      /* master CUE, on every channel this surface puts it on */
@@ -1016,4 +1017,13 @@ void *led_sweep_thread(void *arg)
      usleep(4000000);          /* let the UI settle first */
      led_sweep_run();
      return NULL;
+}
+
+void rbp_led_invalidate_deck(int deck)
+{
+     if (deck >= 0 && deck < 2) {
+          memset(led_last[deck], -1, sizeof(led_last[deck]));
+          memset(led_pad_last[deck], -1, sizeof(led_pad_last[deck]));
+          led_pfl_last[deck] = -1;
+     }
 }

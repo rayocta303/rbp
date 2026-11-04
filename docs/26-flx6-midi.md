@@ -39,12 +39,24 @@ In this port, `map_flx6.c` translates the DDJ-FLX6 hardware inputs (MIDI Notes a
   - **Exclusive Mixer Strips**:
     - When Deck 2 is active: Channel 2 mixer strip (Trim, EQ High/Mid/Low, Fader, Cue, Color FX 2) and Deck 2 jog/pads/pitch control Player 2. Deck 4 strip and controls are **parked / disabled**.
     - When Deck 4 is active: Channel 4 mixer strip (Trim, EQ High/Mid/Low, Fader, Cue, Color FX 4) and Deck 4 jog/pads/pitch control Player 2. Deck 2 strip and controls are **parked / disabled**.
+- **Jog Ring Illumination (Ch 11 / 0xBB, CC 0..3)**:
+  - DDJ-FLX6 controls 72 jog ring LEDs per deck via MIDI channel 11 (`0xBB`):
+    - Deck 1: `CC 0`
+    - Deck 2: `CC 1`
+    - Deck 3: `CC 2`
+    - Deck 4: `CC 3`
+  - When switching layers (e.g. Deck 1 -> Deck 3), the old deck's jog ring is zeroed (`midi_cc(11, old_cc, 0)`), and the active rotation signal is routed to the new deck's CC address.
 - **DeckState Feedback LED (Note 60)**:
   - The hardware `DECK` button illuminates with Note 60 on the currently active layer and turns off on the parked layer.
 - **Master Deck LED State (Note 92)**:
   - Synchronized via `rbp_led.c` (`n_master = 92`) and routed through `deck_ch_fn` to the active channel on both sides.
 - **Channel Level Meters (CC 2)**:
   - Dynamically routed to the currently active mixer channel strip via `meter_ch_fn`, keeping inactive strip meters dark.
+- **LED & VU Cache Invalidation on Switch**:
+  - `rbp_led_invalidate_deck(side)` and `rbp_vu_invalidate_channel(side + 1)` force an instant re-transmission of all transport LEDs (Play, Cue, Sync, Keylock, Pad modes, CUE) and VU meters to the newly active deck.
+- **Instant Strip Knob Transfer & Boot Seeding**:
+  - When switching deck layers, the physical positions of Trim, High/Mid/Low EQ, Fader, and Color FX on the destination strip are immediately transmitted to the RBP Player (`sch = side + 1`).
+  - At system boot (`flx6_startup`), all channel strips, master level, crossfader, and headphone controls are pre-seeded into RBP memory and restored from `/run/rblive4/flx6_knobs.state`, preventing silence or uninitialized states without requiring manual knob wiggling.
 
 ---
 

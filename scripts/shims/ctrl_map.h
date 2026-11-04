@@ -161,6 +161,7 @@ struct led_notes {
      int (*deck_ch_fn)(int deck);
      int (*pad_ch_fn)(int deck);
      int (*meter_ch_fn)(int deck);
+     int (*strip_ch_fn)(int strip);
 
      /* The four pad-mode buttons' LEDs, indexed by RBP'S OWN MODE VALUE --
       * 0 HOT CUE / 1 AUTO BEAT LOOP / 2 SLIP BEAT LOOP / 3 BEAT JUMP -- on the
