@@ -742,9 +742,8 @@ static void flx6_build(void)
      add_note(CH_MIX, N_LOAD2_SHIFT, K_SHORTCUT, CH_GLOBAL);
      /* SHIFT + LOAD 3 (note 90 / 96) is handled in flx6_event() to toggle UTILITY / Settings */
 
-     /* 1-5L/R Shift + Deck -> SLIP mode toggle (Deck 1 / Left & Deck 2 / Right) */
-     add_note(CH_MIX, N_DECK_L_SHIFT, K_SLIP, 1);
-     add_note(CH_MIX, N_DECK_R_SHIFT, K_SLIP, 2);
+     /* 1-5L/R Shift + Deck (N_DECK_L_SHIFT 124 / N_DECK_R_SHIFT 125) are handled in flx6_event()
+      * to toggle SLIP mode cleanly while suppressing deck switching */
 
      /* Beat FX controls (Slots 1..3 on FX1 and FX2) are handled dynamically
       * per slot address in flx6_event() and flx6_update_bfx_led() */
@@ -876,6 +875,8 @@ static void flx6_update_beat_fraction_led(void)
  * Right side: CH_DECK2 (1) = Deck 2, CH_DECK4 (3) = Deck 4 -> Target Player 2 (sch 2) */
 static int flx6_deck_layer[2] = { CH_DECK1, CH_DECK2 };
 static int last_bfx_ch_led = -1;
+static int flx6_shift_held[2] = { 0, 0 };
+static unsigned long long flx6_last_slip_ms[2] = { 0, 0 };
 
 int flx6_get_deck_channel(int deck)
 {
@@ -1021,13 +1022,51 @@ static void flx6_event(const struct snd_seq_event *ev)
           int note = ev->data.note.note;
           int on = (ev->type == SNDRV_SEQ_EVENT_NOTEON) && (ev->data.note.velocity > 0);
 
+          /* Track SHIFT button state per side */
+          if ((ch >= CH_DECK1 && ch <= CH_DECK4) && note == N_SHIFT) {
+               int side = (ch == CH_DECK1 || ch == CH_DECK3) ? 0 : 1;
+               flx6_shift_held[side] = on;
+               if (verbose)
+                    klog("knobshim2: FLX6 side %d SHIFT %s\n", side + 1, on ? "PRESSED" : "RELEASED");
+          }
+
+          /* 1-5L/R SHIFT + DECK (Note 124/125 on CH_MIX) -> SLIP Mode Toggle (suppress deck switch) */
+          if (ch == CH_MIX && (note == N_DECK_L_SHIFT || note == N_DECK_R_SHIFT)) {
+               int side = (note == N_DECK_L_SHIFT) ? 0 : 1;
+               flx6_last_slip_ms[side] = shim_now_ms();
+               if (on) {
+                    int sch = side + 1;
+                    send_rx_key(K_SLIP, OP_PRESS, sch, 0);
+                    send_rx_key(K_SLIP, OP_RELEASE, sch, 0);
+                    klog("knobshim2: FLX6 SHIFT + DECK %d (note %d) -> K_SLIP toggle (sch %d)\n",
+                         side + 1, note, sch);
+               }
+               return;
+          }
+
           /* Deck 3 & 4 button toggle */
           if (note == N_DECK_TOGGLE) {
+               int side = (ch == CH_DECK1 || ch == CH_DECK3) ? 0 : 1;
+               unsigned long long now = shim_now_ms();
+
+               /* Jika SHIFT sedang ditekan (di sisi manapun), ATAU baru saja menerima SLIP note:
+                * JANGAN switch deck! Aktifkan SLIP mode jika belum tertrigger */
+               if (flx6_shift_held[0] || flx6_shift_held[1] || (now - flx6_last_slip_ms[side] < 250)) {
+                    if (on && (now - flx6_last_slip_ms[side] >= 250)) {
+                         flx6_last_slip_ms[side] = now;
+                         int sch = side + 1;
+                         send_rx_key(K_SLIP, OP_PRESS, sch, 0);
+                         send_rx_key(K_SLIP, OP_RELEASE, sch, 0);
+                         klog("knobshim2: FLX6 SHIFT + DECK_TOGGLE side %d -> K_SLIP (deck switch suppressed)\n", side + 1);
+                    }
+                    return;
+               }
+
                if (on) {
-                    if (ch == CH_DECK1 || ch == CH_DECK3) {
+                    if (side == 0) {
                          int next_layer = (flx6_deck_layer[0] == CH_DECK1) ? CH_DECK3 : CH_DECK1;
                          flx6_switch_deck(0, next_layer);
-                    } else if (ch == CH_DECK2 || ch == CH_DECK4) {
+                    } else {
                          int next_layer = (flx6_deck_layer[1] == CH_DECK2) ? CH_DECK4 : CH_DECK2;
                          flx6_switch_deck(1, next_layer);
                     }
