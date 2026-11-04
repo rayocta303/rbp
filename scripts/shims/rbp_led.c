@@ -68,7 +68,7 @@ int led_loop_armed[2];
  * slot maps to a different predicate below), so the index lives here. */
 enum {
      L_SYNC, L_CUE, L_PLAY, L_KEYLOCK, L_VINYL, L_SLIP,
-     L_LOOPIN, L_LOOPOUT, L_ALOOP,
+     L_LOOPIN, L_LOOPOUT, L_ALOOP, L_MASTER,
      L_MODE0, L_MODE1, L_MODE2, L_MODE3, L_SLOT_COUNT
 };
 
@@ -684,7 +684,7 @@ static void led_refresh(void)
           /* A surface with no deck LEDs at all (deck_ch -1) sends nothing for
            * either deck, whatever its note rows say -- the channel guard is what
            * keeps a -1 base from arithmetically landing on channel 0. */
-          int sch = (n->deck_ch < 0) ? -1 : n->deck_ch + i;
+          int sch = n->deck_ch_fn ? n->deck_ch_fn(i) : ((n->deck_ch < 0) ? -1 : n->deck_ch + i);
           int mt      = ((int (*)(void *, int))PE_ISMASTERTEMPO)(pe, i) != 0;
           int vinyl   = ((int (*)(void *, int))PE_ISVINYLMODE)(pe, i) != 0;
           int slip    = ((int (*)(void *, int))PE_ISSLIPMODEON)(pe, i) != 0;
@@ -727,6 +727,7 @@ static void led_refresh(void)
           led_send(sch, n->n_loopout, &led_last[i][L_LOOPOUT],
                    looping ? blink : 1);
           led_send(sch, n->n_autoloop, &led_last[i][L_ALOOP], aloop);
+          led_send(sch, n->n_master, &led_last[i][L_MASTER], tr & RBP_TRANSPORT_MASTER);
 
           /* RGB performance pads: rbp LedDef::ID 18..25 -> whatever note this
            * surface lights for pad p, on its own pad channel. LED_PADS=0 stops
@@ -738,7 +739,7 @@ static void led_refresh(void)
            * which is the one thing this group does that no other group here
            * does -- hence the mode read and the clearing of the old base. */
           if (led_pads && n->pad_ch >= 0 && n->n_pad_base[0] >= 0) {
-               int pch = i ? n->pad_ch2 : n->pad_ch;
+               int pch = n->pad_ch_fn ? n->pad_ch_fn(i) : (i ? n->pad_ch2 : n->pad_ch);
                int m = rbp_pad_mode(i);
                /* -1 = the chain is not up, 4 = rbp's size-bank echo: neither
                 * names a mode, so the pads are left exactly as they are -- the

@@ -50,8 +50,8 @@
 /* ---- MIDI receive channels, 0-based (List channel minus 1) ---- */
 #define CH_DECK1  0   /* List ch 1  -- deck 1 */
 #define CH_DECK2  1   /* List ch 2  -- deck 2 */
-#define CH_DECK3  2   /* List ch 3  -- deck 3 (disabled) */
-#define CH_DECK4  3   /* List ch 4  -- deck 4 (disabled) */
+#define CH_DECK3  2   /* List ch 3  -- deck 3 */
+#define CH_DECK4  3   /* List ch 4  -- deck 4 */
 #define CH_FX1    4   /* List ch 5  -- Beat FX 1 */
 #define CH_FX2    5   /* List ch 6  -- Beat FX 2 */
 #define CH_MIX    6   /* List ch 7  -- mixer knobs, browse, master */
@@ -61,10 +61,10 @@
 #define CH_PADS1S 8   /* List ch 9  -- deck 1 pads +SHIFT */
 #define CH_PADS2  9   /* List ch 10 -- deck 2 pads */
 #define CH_PADS2S 10  /* List ch 11 -- deck 2 pads +SHIFT */
-#define CH_PADS3  11  /* List ch 12 -- deck 3 pads (disabled) */
-#define CH_PADS3S 12  /* List ch 13 -- deck 3 pads +SHIFT (disabled) */
-#define CH_PADS4  13  /* List ch 14 -- deck 4 pads (disabled) */
-#define CH_PADS4S 14  /* List ch 15 -- deck 4 pads +SHIFT (disabled) */
+#define CH_PADS3  11  /* List ch 12 -- deck 3 pads */
+#define CH_PADS3S 12  /* List ch 13 -- deck 3 pads +SHIFT */
+#define CH_PADS4  13  /* List ch 14 -- deck 4 pads */
+#define CH_PADS4S 14  /* List ch 15 -- deck 4 pads +SHIFT */
 
 /* ---- Deck button notes (channels 0..1) ---- */
 #define N_PLAY        11   /* PLAY/PAUSE (+SHIFT 71) */
@@ -111,6 +111,7 @@
 #define N_LOAD1             70  /* LOAD deck 1 */
 #define N_LOAD2             71  /* LOAD deck 2 */
 #define N_LOAD3             72  /* LOAD deck 3 */
+#define N_LOAD4             73  /* LOAD deck 4 */
 #define N_LOAD1_SHIFT       88  /* SHIFT + LOAD 1 -> UTILITY / Setting */
 #define N_LOAD2_SHIFT       89  /* SHIFT + LOAD 2 -> SHORTCUT */
 #define N_LOAD3_SHIFT       90  /* SHIFT + LOAD 3 -> Open / Toggle MIDI / SOURCE view */
@@ -147,6 +148,8 @@
 #define CC_HP_LEVEL         13
 #define CC_CFX1             23  /* Filter / Color FX CH1 */
 #define CC_CFX2             24  /* Filter / Color FX CH2 */
+#define CC_CFX3             25  /* Filter / Color FX CH3 */
+#define CC_CFX4             26  /* Filter / Color FX CH4 */
 #define CC_BROWSE           64  /* Browse relative 0x01/0x7F */
 #define CC_BROWSE_SHIFT     100
 #define CC_FX_DEPTH         2   /* Beat FX Level/Depth (ch 4 & 5) */
@@ -652,10 +655,11 @@ static void flx6_build(void)
           jog_state[d].started = 0;
      }
 
-     /* ---- 2 Decks (ch 0..1: Deck 1 & Deck 2) ---- */
-     for (int d = 0; d < 2; d++) {
+     /* ---- 4 Decks (ch 0..3: Deck 1, 2, 3, 4) ---- */
+     for (int d = 0; d < 4; d++) {
           int rch = d;
-          int sch = d + 1;
+          int side = (d == 0 || d == 2) ? 0 : 1;
+          int sch = side + 1;
 
           /* Transport & Loop */
           add_note(rch, N_PLAY, K_PLAY, sch);
@@ -692,10 +696,12 @@ static void flx6_build(void)
           add_abs(rch, CC_FADER, K_FADER, sch);
      }
 
-     /* ---- 8 Performance Pads per deck (Decks 1 & 2) ---- */
-     for (int d = 0; d < 2; d++) {
-          int rch = (d == 0) ? CH_PADS1 : CH_PADS2;
-          int sch = d + 1;
+     /* ---- 8 Performance Pads per deck (Decks 1, 2, 3, 4) ---- */
+     static const int pad_channels[4] = { CH_PADS1, CH_PADS2, CH_PADS3, CH_PADS4 };
+     for (int d = 0; d < 4; d++) {
+          int rch = pad_channels[d];
+          int side = (d == 0 || d == 2) ? 0 : 1;
+          int sch = side + 1;
           for (int p = 0; p < 8; p++) {
                add_note(rch,  0 + p, K_PAD1 + p, sch);  /* HOT CUE */
                add_note(rch, 16 + p, K_PAD1 + p, sch);  /* PAD FX 1 -> AUTO BEAT LOOP */
@@ -705,9 +711,11 @@ static void flx6_build(void)
      }
 
      /* ---- Mixer / Browse / Global controls on CH_MIX (ch 6) ---- */
-     /* 2-Channel Sound Color FX (Filter) */
+     /* 4-Channel Sound Color FX (Filter) */
      add_abs(CH_MIX, CC_CFX1, K_COLOR, 1);
      add_abs(CH_MIX, CC_CFX2, K_COLOR, 2);
+     add_abs(CH_MIX, CC_CFX3, K_COLOR, 1);
+     add_abs(CH_MIX, CC_CFX4, K_COLOR, 2);
 
      /* Crossfader & Headphone Cue */
      add_abs(CH_MIX, CC_XFADER, K_XFADER, CH_GLOBAL);
@@ -723,9 +731,11 @@ static void flx6_build(void)
      add_note(CH_MIX, N_VIEW, K_BROWSE, CH_GLOBAL);
      add_note(CH_MIX, N_VIEW_SHIFT, K_SOURCE, CH_GLOBAL);
 
-     /* Dedicated Load buttons 1 & 2 */
+     /* Dedicated Load buttons 1..4 */
      add_note(CH_MIX, N_LOAD1, K_LOAD, 1);
      add_note(CH_MIX, N_LOAD2, K_LOAD, 2);
+     add_note(CH_MIX, N_LOAD3, K_LOAD, 1);
+     add_note(CH_MIX, N_LOAD4, K_LOAD, 2);
 
      /* Shift + Load shortcuts */
      /* SHIFT + LOAD 1 (note 88) is handled in flx6_event() to toggle UTILITY / Setting */
@@ -861,6 +871,105 @@ static void flx6_update_beat_fraction_led(void)
      }
 }
 
+/* ---- Deck Layer state ----
+ * Left side:  CH_DECK1 (0) = Deck 1, CH_DECK3 (2) = Deck 3 -> Target Player 1 (sch 1)
+ * Right side: CH_DECK2 (1) = Deck 2, CH_DECK4 (3) = Deck 4 -> Target Player 2 (sch 2) */
+static int flx6_deck_layer[2] = { CH_DECK1, CH_DECK2 };
+static int last_bfx_ch_led = -1;
+
+int flx6_get_deck_channel(int deck)
+{
+     if (deck == 0) return flx6_deck_layer[0];
+     if (deck == 1) return flx6_deck_layer[1];
+     return -1;
+}
+
+int flx6_get_pad_channel(int deck)
+{
+     if (deck == 0) return (flx6_deck_layer[0] == CH_DECK1) ? CH_PADS1 : CH_PADS3;
+     if (deck == 1) return (flx6_deck_layer[1] == CH_DECK2) ? CH_PADS2 : CH_PADS4;
+     return -1;
+}
+
+int flx6_get_meter_channel(int m)
+{
+     if (m == 1) return flx6_deck_layer[0];
+     if (m == 2) return flx6_deck_layer[1];
+     return -1;
+}
+
+static void flx6_update_bfx_channel_led(void)
+{
+     int cur_ch = rbp_beatfx_channel();
+     if (cur_ch < 0) return;
+
+     int want_note = -1;
+     if (cur_ch == 0) {
+          want_note = (flx6_deck_layer[0] == CH_DECK1) ? 28 : 30; /* CH1 or CH3 */
+     } else if (cur_ch == 1) {
+          want_note = (flx6_deck_layer[1] == CH_DECK2) ? 29 : 31; /* CH2 or CH4 */
+     } else if (cur_ch == BFX_CH_MASTER) {
+          want_note = 20; /* MASTER */
+     }
+
+     if (want_note != last_bfx_ch_led) {
+          last_bfx_ch_led = want_note;
+          static const int ch_notes[] = { 20, 28, 29, 30, 31 };
+          for (int i = 0; i < 5; i++) {
+               int n = ch_notes[i];
+               int vel = (n == want_note) ? 0x7F : 0x00;
+               midi_note(CH_FX1, n, vel);
+               midi_note(CH_FX2, n, vel);
+          }
+          if (verbose)
+               klog("knobshim2: FLX6 Beat FX CH LED updated -> rbp_ch=%d note=%d\n",
+                    cur_ch, want_note);
+     }
+}
+
+static void flx6_clear_channel_leds(int ch, int pad_ch)
+{
+     static const int deck_notes[] = {
+          N_PLAY, N_CUE, N_IN, N_OUT, N_4BEAT, N_SYNC, N_SYNC_SHIFT,
+          N_MASTER, N_TEMPO_RANGE, N_MODE_HOT, N_MODE_PFX1, N_MODE_JUMP,
+          N_MODE_SMPL, N_CH_CUE
+     };
+     for (size_t i = 0; i < sizeof(deck_notes)/sizeof(deck_notes[0]); i++) {
+          midi_note(ch, deck_notes[i], 0x00);
+     }
+     midi_note(ch, N_DECK_STATE, 0x00);
+     midi_cc(ch, 2, 0x00);
+
+     if (pad_ch >= 0) {
+          for (int p = 0; p < 8; p++) {
+               midi_note(pad_ch, p, 0x00);
+               midi_note(pad_ch, 16 + p, 0x00);
+               midi_note(pad_ch, 32 + p, 0x00);
+               midi_note(pad_ch, 48 + p, 0x00);
+          }
+     }
+}
+
+static void flx6_switch_deck(int side, int new_layer)
+{
+     if (side < 0 || side > 1) return;
+     int old_layer = flx6_deck_layer[side];
+     if (old_layer == new_layer) return;
+
+     int old_pad_ch = (side == 0) ? ((old_layer == CH_DECK1) ? CH_PADS1 : CH_PADS3)
+                                  : ((old_layer == CH_DECK2) ? CH_PADS2 : CH_PADS4);
+
+     flx6_clear_channel_leds(old_layer, old_pad_ch);
+     flx6_deck_layer[side] = new_layer;
+     midi_note(new_layer, N_DECK_STATE, 0x7F);
+
+     klog("knobshim2: FLX6 %s Deck switched: Deck %d -> Deck %d (Target Player %d, Mixer + Jog + Pads shifted)\n",
+          (side == 0) ? "Left" : "Right", old_layer + 1, new_layer + 1, side + 1);
+
+     last_bfx_ch_led = -1;
+     flx6_update_bfx_channel_led();
+}
+
 static void flx6_startup(void)
 {
      *(volatile uint32_t *)ADDR_MIXER_ROUTE_PLAYER0 = MIXER_ROUTE_INPUT0;
@@ -880,8 +989,20 @@ static void flx6_startup(void)
 
      flx6_load_fx_config();
 
+     flx6_deck_layer[0] = CH_DECK1;
+     flx6_deck_layer[1] = CH_DECK2;
+     midi_note(CH_DECK1, N_DECK_STATE, 0x7F);
+     midi_note(CH_DECK3, N_DECK_STATE, 0x00);
+     midi_note(CH_DECK2, N_DECK_STATE, 0x7F);
+     midi_note(CH_DECK4, N_DECK_STATE, 0x00);
+     flx6_clear_channel_leds(CH_DECK3, CH_PADS3);
+     flx6_clear_channel_leds(CH_DECK4, CH_PADS4);
+
      last_beat_cc_val = -1;
      flx6_update_beat_fraction_led();
+
+     last_bfx_ch_led = -1;
+     flx6_update_bfx_channel_led();
 
      for (int s = 0; s < 6; s++) {
           flx6_slots[s].on = 0;
@@ -900,6 +1021,33 @@ static void flx6_event(const struct snd_seq_event *ev)
           int note = ev->data.note.note;
           int on = (ev->type == SNDRV_SEQ_EVENT_NOTEON) && (ev->data.note.velocity > 0);
 
+          /* Deck 3 & 4 button toggle */
+          if (note == N_DECK_TOGGLE) {
+               if (on) {
+                    if (ch == CH_DECK1 || ch == CH_DECK3) {
+                         int next_layer = (flx6_deck_layer[0] == CH_DECK1) ? CH_DECK3 : CH_DECK1;
+                         flx6_switch_deck(0, next_layer);
+                    } else if (ch == CH_DECK2 || ch == CH_DECK4) {
+                         int next_layer = (flx6_deck_layer[1] == CH_DECK2) ? CH_DECK4 : CH_DECK2;
+                         flx6_switch_deck(1, next_layer);
+                    }
+               }
+               return;
+          }
+
+          /* Discard events from inactive deck layers (parks inactive deck so mixer/pads/jog don't move) */
+          if (ch == CH_DECK1 || ch == CH_DECK3) {
+               if (ch != flx6_deck_layer[0]) return;
+          } else if (ch == CH_DECK2 || ch == CH_DECK4) {
+               if (ch != flx6_deck_layer[1]) return;
+          } else if (ch == CH_PADS1 || ch == CH_PADS1S || ch == CH_PADS3 || ch == CH_PADS3S) {
+               int act_pad = (flx6_deck_layer[0] == CH_DECK1) ? CH_PADS1 : CH_PADS3;
+               if (ch != act_pad && ch != act_pad + 1) return;
+          } else if (ch == CH_PADS2 || ch == CH_PADS2S || ch == CH_PADS4 || ch == CH_PADS4S) {
+               int act_pad = (flx6_deck_layer[1] == CH_DECK2) ? CH_PADS2 : CH_PADS4;
+               if (ch != act_pad && ch != act_pad + 1) return;
+          }
+
           /* SHIFT + HEADPHONE CUE 1-4 (note 104 on ch 0..3): Switch Sound Color FX */
           if (ch >= 0 && ch <= 3 && note == N_CH_CUE_SHIFT) {
                if (on) {
@@ -908,35 +1056,16 @@ static void flx6_event(const struct snd_seq_event *ev)
                return;
           }
 
-          /* Channel CUE (PFL) on channels 0 & 1 only (Deck 1 & Deck 2) */
-          if ((ch == 0 || ch == 1) && note == N_CH_CUE) {
+          /* Channel CUE (PFL) on active deck channel */
+          if ((ch >= CH_DECK1 && ch <= CH_DECK4) && note == N_CH_CUE) {
                if (on) {
-                    int idx = ch;
-                    int cur = me_get_cue(idx);
+                    int side = (ch == CH_DECK1 || ch == CH_DECK3) ? 0 : 1;
+                    int cur = me_get_cue(side);
                     int want = (cur == 0) ? 1 : 0;
-                    me_set_cue(idx, want);
+                    me_set_cue(side, want);
                     if (verbose)
-                         klog("knobshim2: FLX6 CH CUE ch%d -> idx%d cue=%d\n", ch + 1, idx, want);
+                         klog("knobshim2: FLX6 CH CUE side%d (Deck %d) -> cue=%d\n", side + 1, ch + 1, want);
                }
-               return;
-          }
-
-          /* Ignore Channel CUE on channels 2 & 3 (Deck 3 & 4 disabled) */
-          if ((ch == 2 || ch == 3) && note == N_CH_CUE) {
-               return;
-          }
-
-          /* Ignore Deck 3 & 4 button toggle */
-          if ((ch == CH_DECK1 || ch == CH_DECK2) && note == N_DECK_TOGGLE) {
-               if (on && verbose) {
-                    klog("knobshim2: FLX6 Deck 3/4 toggle ignored (2-deck standalone mode)\n");
-               }
-               return;
-          }
-
-          /* Discard all remaining events from Deck 3, Deck 4, and Decks 3/4 pads */
-          if (ch == CH_DECK3 || ch == CH_DECK4 ||
-              (ch >= CH_PADS3 && ch <= CH_PADS4S)) {
                return;
           }
 
@@ -1067,24 +1196,24 @@ static void flx6_event(const struct snd_seq_event *ev)
                return;
           }
 
-          /* +SHIFT + HOT CUE pad (Delete cue) on channels 7 & 9 (+SHIFT: 8 & 10) */
-          if ((ch == CH_PADS1S || ch == CH_PADS2S) && note >= 0 && note < 8) {
+          /* +SHIFT + HOT CUE pad (Delete cue) on channels 7..14 */
+          if ((ch == CH_PADS1S || ch == CH_PADS2S || ch == CH_PADS3S || ch == CH_PADS4S) && note >= 0 && note < 8) {
                if (on) {
-                    int deck_idx = (ch == CH_PADS1S) ? 0 : 1;
-                    hotcue_delete(deck_idx, note + 1);
+                    int side = (ch == CH_PADS1S || ch == CH_PADS3S) ? 0 : 1;
+                    hotcue_delete(side, note + 1);
                }
                return;
           }
 
           /* 4-Beat Auto Loop / Active Loop: Long-press IN (20), +SHIFT IN (76), +SHIFT RELOOP (80) */
-          if ((ch == 0 || ch == 1) && (note == N_IN_4BEAT || note == N_IN_SHIFT || note == N_RELOOP_SHIFT)) {
+          if ((ch >= CH_DECK1 && ch <= CH_DECK4) && (note == N_IN_4BEAT || note == N_IN_SHIFT || note == N_RELOOP_SHIFT)) {
                if (on) {
-                    int idx = ch;
-                    int sch = idx + 1;
+                    int side = (ch == CH_DECK1 || ch == CH_DECK3) ? 0 : 1;
+                    int sch = side + 1;
                     send_rx_key(K_LOOPIN, OP_REPEAT, sch, 0);
                     send_rx_key(K_LOOPIN, OP_RELEASE, sch, 0);
-                    klog("knobshim2: FLX6 Auto 4-Beat Loop ch%d note%d (deck %d)\n",
-                         ch + 1, note, sch);
+                    klog("knobshim2: FLX6 Auto 4-Beat Loop side%d note%d (deck %d)\n",
+                         side + 1, note, sch);
                }
                return;
           }
@@ -1146,9 +1275,11 @@ static void flx6_event(const struct snd_seq_event *ev)
           int cc = ev->data.control.param;
           int val = ev->data.control.value;
 
-          /* Discard all CCs from Deck 3 and Deck 4 */
-          if (ch == CH_DECK3 || ch == CH_DECK4) {
-               return;
+          /* Filter deck layer: discard CC from parked/inactive deck */
+          if (ch == CH_DECK1 || ch == CH_DECK3) {
+               if (ch != flx6_deck_layer[0]) return;
+          } else if (ch == CH_DECK2 || ch == CH_DECK4) {
+               if (ch != flx6_deck_layer[1]) return;
           }
 
           /* Browse knob on CH_MIX */
@@ -1163,16 +1294,26 @@ static void flx6_event(const struct snd_seq_event *ev)
                return;
           }
 
-          /* Jog wheel across decks 0..1 */
-          if ((ch == 0 || ch == 1) && (cc == CC_JOG_WHEEL || cc == CC_JOG_VINYL ||
-                                       cc == CC_JOG_NOVINYL || cc == CC_JOG_SHIFT)) {
-               flx6_jog(ch, val);
+          /* Sound Color FX on CH_MIX: route exclusively to active deck */
+          if (ch == CH_MIX) {
+               if (cc == CC_CFX1 && flx6_deck_layer[0] != CH_DECK1) return;
+               if (cc == CC_CFX3 && flx6_deck_layer[0] != CH_DECK3) return;
+               if (cc == CC_CFX2 && flx6_deck_layer[1] != CH_DECK2) return;
+               if (cc == CC_CFX4 && flx6_deck_layer[1] != CH_DECK4) return;
+          }
+
+          /* Jog wheel across active decks */
+          if ((ch >= CH_DECK1 && ch <= CH_DECK4) && (cc == CC_JOG_WHEEL || cc == CC_JOG_VINYL ||
+                                                     cc == CC_JOG_NOVINYL || cc == CC_JOG_SHIFT)) {
+               int side = (ch == CH_DECK1 || ch == CH_DECK3) ? 0 : 1;
+               flx6_jog(side, val);
                return;
           }
 
-          /* Pitch fader across decks 0..1 */
-          if ((ch == 0 || ch == 1) && (cc == CC_TEMPO_MSB || cc == CC_TEMPO_LSB)) {
-               flx6_pitch(ch, cc, val);
+          /* Pitch fader across active decks */
+          if ((ch >= CH_DECK1 && ch <= CH_DECK4) && (cc == CC_TEMPO_MSB || cc == CC_TEMPO_LSB)) {
+               int side = (ch == CH_DECK1 || ch == CH_DECK3) ? 0 : 1;
+               flx6_pitch(side, cc, val);
                return;
           }
 
@@ -1220,9 +1361,22 @@ static void flx6_tick(void)
           }
      }
 
+     /* Realtime LED sync from rbp player state */
      flx6_update_bfx_led();
      flx6_update_beat_fraction_led();
+     flx6_update_bfx_channel_led();
      flx6_update_jog_ring();
+
+     /* Keep DeckState LED illuminated on active deck layers */
+     static unsigned long long last_deckstate_ms = 0;
+     unsigned long long now = shim_now_ms();
+     if (now - last_deckstate_ms >= 500) {
+          last_deckstate_ms = now;
+          midi_note(CH_DECK1, N_DECK_STATE, (flx6_deck_layer[0] == CH_DECK1) ? 0x7F : 0x00);
+          midi_note(CH_DECK3, N_DECK_STATE, (flx6_deck_layer[0] == CH_DECK3) ? 0x7F : 0x00);
+          midi_note(CH_DECK2, N_DECK_STATE, (flx6_deck_layer[1] == CH_DECK2) ? 0x7F : 0x00);
+          midi_note(CH_DECK4, N_DECK_STATE, (flx6_deck_layer[1] == CH_DECK4) ? 0x7F : 0x00);
+     }
 }
 
 /* LED & Meter definitions */
@@ -1237,6 +1391,11 @@ static const struct led_notes flx6_leds = {
      .n_loopin = 16,
      .n_loopout = 17,
      .n_autoloop = -1,
+     .n_master = 92,
+
+     .deck_ch_fn = flx6_get_deck_channel,
+     .pad_ch_fn = flx6_get_pad_channel,
+     .meter_ch_fn = flx6_get_meter_channel,
 
      .n_mode = { 27, 30, 32, 34 },
 

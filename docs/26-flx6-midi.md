@@ -24,16 +24,27 @@ In this port, `map_flx6.c` translates the DDJ-FLX6 hardware inputs (MIDI Notes a
 
 ---
 
-## 2. Channel Assignment & Deck Mirroring
+## 2. Dynamic 4-Deck Switching & Exclusive Mixer Routing
 
-`rbp` is natively a 2-player engine (Deck 1 and Deck 2). On the 4-channel DDJ-FLX6:
-- **Physical Channel 1**: Assigned to **Deck 1** (Player 0).
-- **Physical Channel 2**: Assigned to **Deck 2** (Player 1).
-- **Physical Channel 3**: Mirrored to **Deck 1** controls (allows multi-layer mixing).
-- **Physical Channel 4**: Mirrored to **Deck 2** controls.
-- **Mixer Strips (Trim, EQ High, Mid, Low, Color FX, Fader)**:
-  - Channels 1 & 3 feed Deck 1 DSP / EQ path.
-  - Channels 2 & 4 feed Deck 2 DSP / EQ path.
+`rbp` is natively a 2-player engine (`PLAYER_0` / Deck 1 / Left and `PLAYER_1` / Deck 2 / Right). On the 4-channel DDJ-FLX6, hardware deck buttons toggle active control layers:
+- **Left Side Layer (Deck 1 vs Deck 3)**:
+  - Default: **Deck 1** active -> controls Player 1 (`sch = 1`).
+  - Pressing `DECK 3` (`N_DECK_TOGGLE` Note 114): switches control to **Deck 3** -> controls Player 1 (`sch = 1`).
+  - **Exclusive Mixer Strips**:
+    - When Deck 1 is active: Channel 1 mixer strip (Trim, EQ High/Mid/Low, Fader, Cue, Color FX 1) and Deck 1 jog/pads/pitch control Player 1. Deck 3 strip and controls are **parked / disabled** (clean standalone 1-to-1 control).
+    - When Deck 3 is active: Channel 3 mixer strip (Trim, EQ High/Mid/Low, Fader, Cue, Color FX 3) and Deck 3 jog/pads/pitch control Player 1. Deck 1 strip and controls are **parked / disabled**.
+- **Right Side Layer (Deck 2 vs Deck 4)**:
+  - Default: **Deck 2** active -> controls Player 2 (`sch = 2`).
+  - Pressing `DECK 4` (`N_DECK_TOGGLE` Note 114): switches control to **Deck 4** -> controls Player 2 (`sch = 2`).
+  - **Exclusive Mixer Strips**:
+    - When Deck 2 is active: Channel 2 mixer strip (Trim, EQ High/Mid/Low, Fader, Cue, Color FX 2) and Deck 2 jog/pads/pitch control Player 2. Deck 4 strip and controls are **parked / disabled**.
+    - When Deck 4 is active: Channel 4 mixer strip (Trim, EQ High/Mid/Low, Fader, Cue, Color FX 4) and Deck 4 jog/pads/pitch control Player 2. Deck 2 strip and controls are **parked / disabled**.
+- **DeckState Feedback LED (Note 60)**:
+  - The hardware `DECK` button illuminates with Note 60 on the currently active layer and turns off on the parked layer.
+- **Master Deck LED State (Note 92)**:
+  - Synchronized via `rbp_led.c` (`n_master = 92`) and routed through `deck_ch_fn` to the active channel on both sides.
+- **Channel Level Meters (CC 2)**:
+  - Dynamically routed to the currently active mixer channel strip via `meter_ch_fn`, keeping inactive strip meters dark.
 
 ---
 
@@ -63,6 +74,19 @@ static struct flx6_bfx_slot flx6_slots[6] = {
      { 9, 1, 64, 0 },  /* FX2-3: Roll,    Deck 2 (Note 71, CC 6) */
 };
 ```
+
+### Realtime Beat FX Panel Sync from GUI `rbp`
+The Beat FX panel on the DDJ-FLX6 receives two-way realtime synchronization from `rbp`:
+1. **Channel Selection LEDs**:
+   - `rbp_beatfx_channel()` queries the active channel in `MixerEngine`.
+   - Notes 28 (CH1), 29 (CH2), 30 (CH3), 31 (CH4), and 20 (Master) on `CH_FX1` and `CH_FX2` are illuminated dynamically according to the active channel and current deck layer.
+2. **Beat Fraction Parameter (`CC 100`)**:
+   - `rbp_beatfx_numer()` and `rbp_beatfx_denom()` read fraction parameters directly from `rbp`.
+   - `flx6_beat_to_cc100()` maps fractions (1/4 to 32) to `CC 100` on both FX banks whenever changed on the touchscreen.
+3. **Beat FX ON/OFF Status**:
+   - `rbp_beatfx_on()` monitors the DSP toggle state, blinking the active slot LED at 250 ms intervals when ON, and turning it OFF when disabled.
+4. **Beat FX Type Sync**:
+   - `rbp_beatfx_type()` keeps the active slot type synchronized if changed via touchscreen rotary.
 
 ### Auto-Disable on Channel Switch (Anti-Glitch / Anti-Pop)
 When switching Beat FX channel routing (`K_BFXCH`):

@@ -725,6 +725,7 @@ static const struct led_notes jp21_leds = {
      .n_sync = 8, .n_cue = 9, .n_play = 10,
      .n_keylock = 34, .n_vinyl = 35, .n_slip = 36,
      .n_loopin = 37, .n_loopout = 38, .n_autoloop = 39,
+     .n_master = -1,
 
      /* No pad-mode LEDs are sent here, and -1 is spelled out rather than left
       * to zero-init: `0` is a legal note, so an omitted array would light notes

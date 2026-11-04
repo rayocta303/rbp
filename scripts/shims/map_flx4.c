@@ -1271,20 +1271,8 @@ static const struct led_notes flx4_leds = {
      .n_slip = -1,             /* absent: the unit has no SLIP button */
      .n_loopin = 16,           /* MEASURED: 16/0 = deck 1 LOOP IN */
      .n_loopout = 17,          /* MEASURED: 17/0 = deck 1 LOOP OUT */
-     .n_autoloop = -1,         /* ABSENT, and now settled: 4 BEAT / EXIT has NO
-                                * LED to light. Pioneer's own "List of MIDI
-                                * Messages" gives note 77 (and +SHIFT 80) an
-                                * EMPTY receive column -- the button sends and
-                                * receives nothing back -- and the panel agreed:
-                                * 77/0 held for 1 s with the same 100 ms stream
-                                * that lit every other row stayed dark. So this
-                                * is not an unmeasured number to chase; leaving
-                                * it -1 is the correct final state. The same
-                                * empty receive column covers SHIFT (63), platter
-                                * touch (54/103), CUE/LOOP CALL (81/83, +SHIFT
-                                * 61/62), BEAT SYNC long-press (92) and the FX
-                                * section's 74/75/99-102 on ch 4/5 -- none of
-                                * those have a host-driven LED either. */
+     .n_autoloop = -1,         /* ABSENT, and now settled: 4 BEAT / EXIT has NO */
+     .n_master = 92,           /* MEASURED: 92/0 = deck 1 MASTER */
 
      /* The four pad-mode buttons, indexed by rbp's own mode value. MEASURED ON
       * THE GLASS 2026-10-01: each of the four was lit alone from the host and

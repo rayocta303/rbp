@@ -443,8 +443,9 @@ void *vu_thread(void *arg)
                                                            g_fader[m],
                                                            vu_leds->meter_pre_fader));
                if (v != last_c[m]) {
-                    int ok = midi_cc(vu_leds->meter_ch_first + (m - 1),
-                                     vu_leds->n_meter_cc, v);
+                    int ch_target = vu_leds->meter_ch_fn ? vu_leds->meter_ch_fn(m)
+                                                         : (vu_leds->meter_ch_first + (m - 1));
+                    int ok = (ch_target >= 0) ? midi_cc(ch_target, vu_leds->n_meter_cc, v) : 0;
                     if (ok)
                          last_c[m] = v;
                     if (m == 1) {       /* what deck 1's meter was told */

@@ -155,6 +155,12 @@ struct led_notes {
      /* one note per deck LED, in the order rbp_led.c reads them */
      int n_sync, n_cue, n_play, n_keylock, n_vinyl, n_slip;
      int n_loopin, n_loopout, n_autoloop;
+     int n_master;         /* master deck LED; -1 = none */
+
+     /* Dynamic channel resolvers for layered surfaces (e.g. DDJ-FLX6) */
+     int (*deck_ch_fn)(int deck);
+     int (*pad_ch_fn)(int deck);
+     int (*meter_ch_fn)(int deck);
 
      /* The four pad-mode buttons' LEDs, indexed by RBP'S OWN MODE VALUE --
       * 0 HOT CUE / 1 AUTO BEAT LOOP / 2 SLIP BEAT LOOP / 3 BEAT JUMP -- on the
