@@ -1,0 +1,65 @@
+{
+  "id": "rmx1000-roll",
+  "name": {
+    "en": "RMX-1000 style Roll (MASTER)",
+    "fr": "Roll façon RMX-1000 (MASTER)"
+  },
+  "description": {
+    "en": "With the AUX selector on PORTABLE the RMX window replaces STATUS in the bottom-right card of BEAT FX: X-PAD matrix, KICK, SNARE, CLAP, H.HAT, H (hold), OVERDUB always quantized, X to erase; the tempo always comes automatically from the MASTER audio. Our interpretation of the RMX-1000, not a Pioneer product.",
+    "fr": "Avec le sélecteur AUX sur PORTABLE, la fenêtre RMX remplace STATUS dans la carte en bas à droite de BEAT FX : matrice X-PAD, KICK, SNARE, CLAP, H.HAT, H (maintien), OVERDUB toujours quantifié, X pour effacer ; le tempo vient toujours automatiquement de l’audio du MASTER. Notre interprétation de la RMX-1000, pas un produit Pioneer."
+  },
+  "firmwares": [
+    "1.20"
+  ],
+  "default": false,
+  "order": 40,
+  "runtime_directory": "rmx1000-roll",
+  "namespace": "rmx1000_roll",
+  "requires": [
+    "core"
+  ],
+  "files": [
+    {
+      "source": "module.sh",
+      "target": "module.sh",
+      "executable": false
+    },
+    {
+      "source": "config.txt",
+      "target": "config.txt",
+      "executable": false
+    },
+    {
+      "source": "assets/kick.wav",
+      "target": "kick.wav",
+      "executable": false
+    },
+    {
+      "source": "assets/snare.wav",
+      "target": "snare.wav",
+      "executable": false
+    },
+    {
+      "source": "assets/clap.wav",
+      "target": "clap.wav",
+      "executable": false
+    },
+    {
+      "source": "assets/hat.wav",
+      "target": "hat.wav",
+      "executable": false
+    }
+  ],
+  "category": "effects",
+  "build_files": [
+    "rx3_rmx_roll_module.c",
+    "rx3_rmx_roll.h",
+    "rx3_rmx_dots.h",
+    "rx3_rmx_xpad.h",
+    "rx3_rmx_state.h",
+    "rx3_rmx_filter.h",
+    "rx3_rmx_slots.h",
+    "rx3_rmx_layers.h",
+    "rx3_rmx_osc.h"
+  ]
+}

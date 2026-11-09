@@ -1,0 +1,118 @@
+{
+  "id": "beatjump-custom",
+  "name": {
+    "en": "Custom Beat Jump",
+    "fr": "Beat Jump personnalisé"
+  },
+  "description": {
+    "en": "Choose the jump of each of the 16 Beat Jump pads (8 on BEAT JUMP, 8 on BEAT JUMP 2), up to 64 beats (16 bars), on the app’s Beat Jump screen.",
+    "fr": "Choisissez le saut de chacun des 16 pads Beat Jump (8 en BEAT JUMP, 8 en BEAT JUMP 2), jusqu’à 64 mesures, dans l’écran Beat Jump de l’application."
+  },
+  "firmwares": [
+    "1.19",
+    "1.20"
+  ],
+  "default": true,
+  "order": 12,
+  "runtime_directory": "beatjump-custom",
+  "namespace": "beatjump_custom",
+  "requires": [
+    "core",
+    "decoder-sleep"
+  ],
+  "conflicts": [
+    "beatjump-32bars"
+  ],
+  "files": [
+    {
+      "source": "module.sh",
+      "target": "module.sh",
+      "executable": false
+    }
+  ],
+  "category": "beatjump",
+  "build_files": [
+    "rx3_beatjump_custom_module.c",
+    "rx3_beatjump_custom_config.h"
+  ],
+  "messages": {
+    "en": {
+      "beatJump.nav": "Beat Jump",
+      "beatJump.title": "Beat Jump pads",
+      "beatJump.lede": "Choose how far each of the 16 pads jumps, back or forward, up to 64 beats (16 bars). Save to the USB drive: the player reads it when the drive is inserted.",
+      "beatJump.needDrive": "Choose a USB drive to save the Beat Jump pads.",
+      "beatJump.page1": "BEAT JUMP",
+      "beatJump.page2": "BEAT JUMP 2 (SHIFT + BEAT JUMP)",
+      "beatJump.mode": "Jump of pad {number}",
+      "beatJump.amount": "Length",
+      "beatJump.unit": "Unit",
+      "beatJump.stock": "Original ({jump})",
+      "beatJump.back": "Back",
+      "beatJump.forward": "Forward",
+      "beatJump.unitBeats": "beats",
+      "beatJump.unitBars": "bars",
+      "beatJump.beats": {
+        "one": "{value} beat",
+        "other": "{value} beats"
+      },
+      "beatJump.bars": {
+        "one": "{value} bar",
+        "other": "{value} bars"
+      },
+      "beatJump.jumpBack": "← {amount}",
+      "beatJump.jumpForward": "{amount} →",
+      "beatJump.save": "Save to USB drive",
+      "beatJump.saved": "Beat Jump pads saved. Insert the drive in the player to use them.",
+      "beatJump.unsaved": "Changes not yet saved to the USB drive.",
+      "beatJump.reset": "All original",
+      "beatJump.fileInvalid": "The Beat Jump file on this drive is not valid: the player ignores it and keeps the original jumps. Saving replaces it.",
+      "beatJump.moduleOff": "Custom Beat Jump is not selected in Modules: without it the player ignores these pads.",
+      "beatJump.enable": "Select Custom Beat Jump",
+      "beatJump.migrate": "Beat Jump ±32 is installed on this drive. Custom Beat Jump replaces it: copy its jumps (pads 7 and 8 at 32 beats) and switch?",
+      "beatJump.migrateAction": "Copy ±32 and switch",
+      "beatJump.screenHint": "The pads on the player’s screen still show the original pictures; the jump is the one chosen here. The jog display shows no indicator for a custom jump.",
+      "beatJump.errorValue": "A Beat Jump pad has a length the player does not accept: ½ beat, or 1 to 64 beats (16 bars).",
+      "beatJump.errorPads": "The Beat Jump settings must describe 16 pads.",
+      "beatJump.errorColour": "The pad light colour must be written #RRGGBB."
+    },
+    "fr": {
+      "beatJump.nav": "Beat Jump",
+      "beatJump.title": "Pads Beat Jump",
+      "beatJump.lede": "Choisissez la longueur du saut de chacun des 16 pads, en arrière ou en avant, jusqu’à 64 mesures. Enregistrez sur la clé USB : la platine le lit à l’insertion de la clé.",
+      "beatJump.needDrive": "Choisissez une clé USB pour enregistrer les pads Beat Jump.",
+      "beatJump.page1": "BEAT JUMP",
+      "beatJump.page2": "BEAT JUMP 2 (SHIFT + BEAT JUMP)",
+      "beatJump.mode": "Saut du pad {number}",
+      "beatJump.amount": "Longueur",
+      "beatJump.unit": "Unité",
+      "beatJump.stock": "D’origine ({jump})",
+      "beatJump.back": "Arrière",
+      "beatJump.forward": "Avant",
+      "beatJump.unitBeats": "temps",
+      "beatJump.unitBars": "mesures",
+      "beatJump.beats": {
+        "one": "{value} temps",
+        "other": "{value} temps"
+      },
+      "beatJump.bars": {
+        "one": "{value} mesure",
+        "other": "{value} mesures"
+      },
+      "beatJump.jumpBack": "← {amount}",
+      "beatJump.jumpForward": "{amount} →",
+      "beatJump.save": "Enregistrer sur la clé USB",
+      "beatJump.saved": "Pads Beat Jump enregistrés. Insérez la clé dans la platine pour les utiliser.",
+      "beatJump.unsaved": "Modifications pas encore enregistrées sur la clé USB.",
+      "beatJump.reset": "Tout d’origine",
+      "beatJump.fileInvalid": "Le fichier Beat Jump de cette clé n’est pas valide : la platine l’ignore et garde les sauts d’origine. L’enregistrement le remplace.",
+      "beatJump.moduleOff": "Beat Jump personnalisé n’est pas sélectionné dans Modules : sans lui, la platine ignore ces pads.",
+      "beatJump.enable": "Sélectionner Beat Jump personnalisé",
+      "beatJump.migrate": "Beat Jump ±32 est installé sur cette clé. Beat Jump personnalisé le remplace : reprendre ses sauts (pads 7 et 8 à 32 temps) et changer ?",
+      "beatJump.migrateAction": "Reprendre ±32 et changer",
+      "beatJump.screenHint": "Les pads à l’écran de la platine montrent encore les images d’origine ; le saut est celui choisi ici. L’affichage du jog n’indique rien pour un saut personnalisé.",
+      "beatJump.errorValue": "Un pad Beat Jump a une longueur que la platine n’accepte pas : ½ temps, ou de 1 à 64 temps (16 mesures).",
+      "beatJump.errorPads": "Les réglages Beat Jump doivent décrire 16 pads.",
+      "beatJump.errorColour": "La couleur des pads doit s’écrire #RRGGBB."
+    }
+  }
+}

@@ -1,0 +1,6 @@
+#!/bin/sh
+# GET ?r=<richiesta>: il file audio del brano, così com'è sulla chiavetta.
+. /tmp/stems-local/www/cgi-bin/comune
+p=$(richiesta "$(param r)") || risposta "404 Not Found" "richiesta sconosciuta"
+printf 'Content-Type: application/octet-stream\r\nContent-Length: %s\r\n\r\n' "$(wc -c < "$p")"
+cat "$p"

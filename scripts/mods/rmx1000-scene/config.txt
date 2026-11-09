@@ -1,0 +1,38 @@
+# RMX-1000 SCENE FX: configurazione. Sono dati, mai eseguiti come shell.
+# Una riga chiave=valore; le righe con # e le chiavi sconosciute si ignorano.
+# Per cambiarla senza ricostruire il mod copia questo file sulla chiavetta in
+# RX3_RUNTIME/rmx1000-scene.txt: le chiavi scritte lì vincono su queste.
+#
+# type=hpf   filtro passa-alto a scorrimento, 60 Hz -> 4,1 kHz (Butterworth)
+# type=lpf   filtro passa-basso, 17 kHz -> 261 Hz (Butterworth)
+# type=bpf   filtro passa-banda, centro 213 Hz -> 4,8 kHz, banda che si stringe
+type=hpf
+#
+# echo=on aggiunge un eco a tempo dopo il filtro (tempo = BEAT < > del player,
+# in battere con la BPM del MASTER). echo=off: solo filtro.
+echo=off
+#
+# Rigenerazioni dell'eco, 0..90 (percento), e livello dell'eco, 0..100.
+feedback=45
+level=70
+#
+# Selettore degli effetti sul BEAT FX posizione 4 (HELIX). selector=on: girando il
+# selettore su 4 compare sullo schermo una riga di tasti per scegliere l'effetto
+# (HELIX nativo, HPF/LPF/BPF ECHO; SPIRAL, REVERB e CRUSH ECHO si vedono in grigio ma non suonano ancora).
+# selector=off: la posizione 4 suona sempre la scena scelta qui sopra, come prima.
+selector=on
+# Effetto con cui parte la posizione 4: helix (il tuo, nativo), hpf-echo, lpf-echo,
+# bpf-echo.
+start=helix
+# Lasciando la posizione 4: reset = al ritorno torna l'effetto di partenza;
+# keep = resta quello scelto. Sullo schermo il tasto KEEP lo gira (non si salva).
+policy=reset
+# switch=now: il nuovo effetto parte subito; switch=off: aspetta il prossimo OFF.
+switch=now
+# unavailable=show: gli effetti non ancora scritti compaiono ma non si toccano;
+# hide: spariscono dall'elenco.
+unavailable=show
+# autoopen=on: la riga si apre da sola sulla posizione 4; off: non si apre.
+autoopen=on
+# arrival=list: girando su 4 compare subito l'elenco degli effetti; quick: la riga corta.
+arrival=list

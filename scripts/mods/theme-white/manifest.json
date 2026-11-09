@@ -1,0 +1,40 @@
+{
+  "id": "theme-white",
+  "name": {
+    "en": "Light theme",
+    "fr": "Thème clair"
+  },
+  "description": {
+    "en": "A light interface for bright rooms. The waveform stays dark so it remains readable.",
+    "fr": "Interface claire pour les lieux éclairés. La forme d'onde reste sombre pour garder sa lisibilité."
+  },
+  "firmwares": [
+    "1.19",
+    "1.20"
+  ],
+  "default": false,
+  "order": 50,
+  "category": "screen",
+  "runtime_directory": "theme-white",
+  "namespace": "theme_white",
+  "requires": [
+    "core"
+  ],
+  "conflicts": [],
+  "files": [
+    {
+      "source": "module.sh",
+      "target": "module.sh",
+      "executable": false
+    }
+  ],
+  "build_files": [
+    "rx3_theme_module.c",
+    "rx3_theme_decl.h",
+    "rx3_theme_feature.h",
+    "rx3_theme_pixels.h",
+    "rx3_theme_ink.h",
+    "rx3_theme_conversion.h",
+    "rx3_theme_utility.h"
+  ]
+}

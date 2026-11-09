@@ -1,0 +1,34 @@
+{
+  "id": "colorfx-dual",
+  "name": {
+    "en": "Several SOUND COLOR FX at once",
+    "fr": "Plusieurs SOUND COLOR FX à la fois"
+  },
+  "description": {
+    "en": "Tap one SOUND COLOR FX after the other to run up to all six at once; the COLOR knob drives them all. Tap one that is on to turn it off, hold it to turn all off.",
+    "fr": "Touchez un SOUND COLOR FX après l’autre pour en jouer jusqu’à six à la fois ; le bouton COLOR les règle tous. Touchez un effet actif pour l’éteindre, maintenez-le pour tout éteindre."
+  },
+  "firmwares": [
+    "1.19",
+    "1.20"
+  ],
+  "default": false,
+  "order": 106,
+  "runtime_directory": "colorfx-dual",
+  "namespace": "colorfx_dual",
+  "requires": [
+    "core"
+  ],
+  "conflicts": [],
+  "files": [
+    {
+      "source": "module.sh",
+      "target": "module.sh",
+      "executable": false
+    }
+  ],
+  "category": "effects",
+  "build_files": [
+    "rx3_colorfx_dual_module.c"
+  ]
+}

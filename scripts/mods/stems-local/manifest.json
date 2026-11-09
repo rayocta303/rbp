@@ -1,0 +1,56 @@
+{
+  "id": "stems-local",
+  "name": {
+    "en": "Make stems (local)",
+    "fr": "Créer les stems (local)"
+  },
+  "description": {
+    "en": "MAKE STEMS (LOCAL): the deck queues tracks and the Mac app, connected with the rear USB cable, separates them and writes the stems back to the drive while you play.",
+    "fr": "MAKE STEMS (LOCAL) : la console met des morceaux en file, l'app du Mac reliée par le câble USB arrière les sépare et écrit les stems sur la clé pendant que vous jouez."
+  },
+  "firmwares": [
+    "1.19",
+    "1.20"
+  ],
+  "default": true,
+  "order": 61,
+  "category": "stems",
+  "runtime_directory": "stems-local",
+  "namespace": "stems_local",
+  "requires": [
+    "stems"
+  ],
+  "conflicts": [],
+  "files": [
+    {
+      "source": "module.sh",
+      "target": "module.sh",
+      "executable": false
+    },
+    {
+      "source": "www/cgi-bin/comune",
+      "target": "www/cgi-bin/comune",
+      "executable": true
+    },
+    {
+      "source": "www/cgi-bin/coda",
+      "target": "www/cgi-bin/coda",
+      "executable": true
+    },
+    {
+      "source": "www/cgi-bin/brano",
+      "target": "www/cgi-bin/brano",
+      "executable": true
+    },
+    {
+      "source": "www/cgi-bin/carica",
+      "target": "www/cgi-bin/carica",
+      "executable": true
+    },
+    {
+      "source": "www/cgi-bin/fine",
+      "target": "www/cgi-bin/fine",
+      "executable": true
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "id": "browse-longpress",
+  "channel": "developer",
+  "name": {
+    "en": "Browser long press",
+    "fr": "Appui long dans le navigateur"
+  },
+  "description": {
+    "en": "Hold a track in the browser for 0.6 s: a notice says MAKE STEMS in queue with the title of the highlighted row. Test step: nothing is queued yet. Works with Key Match on.",
+    "fr": "Maintenir un morceau dans le navigateur 0,6 s : un avis indique MAKE STEMS en file avec le titre de la ligne en surbrillance. Étape de test : rien n'est encore mis en file."
+  },
+  "firmwares": [
+    "1.19",
+    "1.20"
+  ],
+  "default": true,
+  "order": 98,
+  "category": "screen",
+  "runtime_directory": "browse-longpress",
+  "namespace": "browse_longpress",
+  "requires": [
+    "core"
+  ],
+  "conflicts": [],
+  "files": [
+    {
+      "source": "module.sh",
+      "target": "module.sh",
+      "executable": false
+    }
+  ],
+  "build_files": [
+    "rx3_browse_longpress_module.c",
+    "rx3_longpress_state.h"
+  ]
+}

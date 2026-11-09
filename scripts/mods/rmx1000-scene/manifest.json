@@ -1,0 +1,41 @@
+{
+  "id": "rmx1000-scene",
+  "channel": "developer",
+  "name": {
+    "en": "RMX-1000 SCENE FX filters",
+    "fr": "Filtres SCENE FX façon RMX-1000"
+  },
+  "description": {
+    "en": "BEAT FX position HELIX plays a sliding HPF, LPF or BPF of 256 steps, as on the RMX-1000 SCENE FX; the Lv/Depth knob slides it, with an optional tempo echo. Unstable build, not tried on a console.",
+    "fr": "La position HELIX du BEAT FX joue un filtre HPF, LPF ou BPF à 256 pas, comme le SCENE FX du RMX-1000 ; le bouton Lv/Depth le fait glisser, avec un écho au tempo en option. Version instable, non essayée sur console."
+  },
+  "firmwares": [
+    "1.20"
+  ],
+  "default": false,
+  "order": 39,
+  "runtime_directory": "rmx1000-scene",
+  "namespace": "rmx1000_scene",
+  "requires": [
+    "core"
+  ],
+  "conflicts": [],
+  "files": [
+    {
+      "source": "module.sh",
+      "target": "module.sh",
+      "executable": false
+    },
+    {
+      "source": "config.txt",
+      "target": "config.txt",
+      "executable": false
+    }
+  ],
+  "category": "effects",
+  "build_files": [
+    "rx3_rmx_scene_module.c",
+    "rx3_rmx_filter.h",
+    "rx3_rmx_fxsel.h"
+  ]
+}

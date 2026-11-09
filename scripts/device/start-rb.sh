@@ -356,6 +356,14 @@ for v in $SHIM_VARS; do
     export "$v=$val"
 done
 
+# Load XDJ-RX3 mod modules and runtime environment
+MOD_ENV_ARGS=""
+if [ -f "$HERE/load-mods.sh" ]; then
+    . "$HERE/load-mods.sh"
+elif [ -f "$RB_DEPLOY_ROOT/load-mods.sh" ]; then
+    . "$RB_DEPLOY_ROOT/load-mods.sh"
+fi
+
 # LD_PRELOAD is deliberately NOT exported here: it is passed inside the chroot at
 # step 9 instead. The loader that has to act on it is the chroot's ld.so, and
 # exporting it in this shell would also hand it to the HOST's chroot binary,
@@ -457,7 +465,8 @@ rb_bootmsg "launching rbp (log: $RBP_LOG)"
 nohup chroot "$RB_CHROOT" env \
       "PATH=/bin:/sbin:/usr/bin:/usr/sbin" \
       "LD_PRELOAD=$RB_LD_PRELOAD" \
-      "$RB_LOADER" "$RB_PLAYER" -a \
+      $MOD_ENV_ARGS \
+      "$RB_PLAYER" -a \
       </dev/null >>"$RBP_LOG" 2>&1 &
 
 # Wait for rbp's DeviceSQL channel to come up, detected by it opening the

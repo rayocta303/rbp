@@ -1,0 +1,13 @@
+#!/bin/sh
+# POST ?r=<richiesta>&f=<file .rx3stem>: riceve uno stem in un file provvisorio.
+. /tmp/stems-local/www/cgi-bin/comune
+p=$(richiesta "$(param r)") || risposta "404 Not Found" "richiesta sconosciuta"
+f=$(param f)
+nome_valido "$f" || risposta "400 Bad Request" "nome file non valido"
+case $f in *.rx3stem) ;; *) risposta "400 Bad Request" "solo .rx3stem" ;; esac
+[ "$REQUEST_METHOD" = POST ] || risposta "405 Method Not Allowed" "serve POST"
+mkdir -p "$OUTDIR/.ventotto" || risposta "500 Internal Server Error" "chiavetta non scrivibile"
+head -c "${CONTENT_LENGTH:-0}" > "$OUTDIR/.ventotto/$f.part" || risposta "500 Internal Server Error" "scrittura"
+[ "$(wc -c < "$OUTDIR/.ventotto/$f.part")" = "${CONTENT_LENGTH:-0}" ] ||
+    risposta "500 Internal Server Error" "file incompleto"
+risposta "200 OK" "ricevuto"

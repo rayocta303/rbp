@@ -1,0 +1,45 @@
+# Roll RMX-1000 sul MASTER: configurazione. Sono dati, mai eseguiti come shell.
+# Una riga chiave=valore; le righe con # e le chiavi sconosciute si ignorano.
+# Per cambiarla senza ricostruire il mod copia questo file sulla chiavetta in
+# RX3_RUNTIME/rmx1000-roll.txt: le chiavi scritte lì vincono su queste.
+#
+# mode=aux       come il vecchio Roll: selettore AUX su PORTABLE = modo Roll, su LINE = tutto nativo.
+#                I pulsanti del BEAT FX non vengono MAI toccati. In modo Roll: ROLL dai pad e dalla riga
+#                sullo schermo, manopola AUX = livello
+# mode=always    modo Roll sempre attivo (manopola AUX non toccata)
+# mode=off       modulo inerte
+mode=aux
+#
+# Valore "raw" del selettore AUX in posizione PORTABLE (0 OFF, 1 LINE, 2 PORTABLE secondo il campionatore;
+# non misurato da questo modulo). Se il modo Roll non parte metti trace=on e leggi il log.
+portable-raw=2
+trace=off
+#
+# Pad fisici: in modo Roll la pagina scelta diventa ROLL (pad 1..7 = 1/16 1/8 1/4 1/2 1 2 4, pad 8 = HOLD)
+# pads=beat-loop | beat-loop-2 | slip-loop | off     pad-lights=on|off     panel=on|off (riga sullo schermo)
+pads=beat-loop
+pad-lights=on
+panel=on
+#
+# capture=after   il loop sono i battiti che SEGUONO la pressione (come l'RMX-1000):
+#                 per una lunghezza si sente il suono normale, poi si ripete
+# capture=before  il loop è quello appena PASSATO e si ripete subito (stutter)
+capture=after
+#
+# Dissolvenze, in millisecondi: entrata (0..200) e uscita (0..2000).
+in-ms=3
+out-ms=8
+#
+# Lunghezza di partenza: 0 1/16, 1 1/8, 2 1/4, 3 1/2, 4 3/4, 5 1, 6 2, 7 4, 8 8, 9 16 battiti.
+# BEAT < > la cambiano poi come sempre.
+length=5
+#
+# BPM da usare se il player non dà il tempo del MASTER (40..300).
+bpm=120
+#
+#
+# Da dove viene il tempo del Roll:
+# tempo=auto  segue il BRANO: lo ricava dall'audio del MASTER (serve qualche secondo di
+#             musica per agganciarsi); finché non è agganciato usa il BPM del player
+# tempo=deck  solo il BPM del player (come la prima versione)
+tempo=auto

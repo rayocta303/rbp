@@ -1,0 +1,9 @@
+#!/bin/sh
+# GET: brani in attesa, una riga per richiesta: nome<TAB>file<TAB>titolo
+. /tmp/stems-local/www/cgi-bin/comune
+printf 'Content-Type: text/plain; charset=utf-8\r\n\r\n'
+for r in "$CODA"/*.req; do
+    [ -f "$r" ] || continue
+    printf '%s\t%s\t%s\n' "${r##*/}" "$(sed -n 's/^file=//p' "$r" | head -1)" \
+        "$(sed -n 's/^title=//p' "$r" | head -1)"
+done

@@ -1,0 +1,37 @@
+{
+  "id": "logo",
+  "name": {
+    "en": "Logo",
+    "fr": "Logo"
+  },
+  "description": {
+    "en": "Display your logo in the centre of the main screen.\nPrepare your logo on the app’s Logo screen.",
+    "fr": "Affichez votre logo au centre de l’écran principal.\nPréparez votre logo dans l’écran Logo de l’application."
+  },
+  "firmwares": [
+    "1.19",
+    "1.20"
+  ],
+  "default": false,
+  "order": 60,
+  "category": "screen",
+  "runtime_directory": "logo",
+  "namespace": "logo",
+  "requires": [
+    "core"
+  ],
+  "conflicts": [],
+  "files": [
+    {
+      "source": "module.sh",
+      "target": "module.sh",
+      "executable": false
+    }
+  ],
+  "build_files": [
+    "rx3_logo_module.c",
+    "rx3_logo_decl.h",
+    "rx3_logo_feature.h",
+    "rx3_logo_geometry.h"
+  ]
+}

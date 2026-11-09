@@ -1,0 +1,18 @@
+#!/bin/sh
+# POST ?r=<richiesta>&f=<file>: rende visibile lo stem e chiude la richiesta.
+. /tmp/stems-local/www/cgi-bin/comune
+r=$(param r); f=$(param f)
+p=$(richiesta "$r") || risposta "404 Not Found" "richiesta sconosciuta"
+nome_valido "$f" || risposta "400 Bad Request" "nome file non valido"
+[ -f "$OUTDIR/.ventotto/$f.part" ] || risposta "404 Not Found" "stem non caricato"
+mv "$OUTDIR/.ventotto/$f.part" "$OUTDIR/$f" && rm -f "$CODA/$r" && sync
+# L'icona S nel browser: il nome entra subito nell'indice in RAM (il core lo rilegge in ~1 s), senza aspettare il controllo periodico.
+case $f in
+    *.rx3stem)
+        n=${f%.rx3stem}
+        grep -qxF "$n" /tmp/rx3-stems-index.txt 2>/dev/null || {
+            cp /tmp/rx3-stems-index.txt /tmp/rx3-stems-index.txt.add 2>/dev/null || : > /tmp/rx3-stems-index.txt.add
+            printf '%s\n' "$n" >> /tmp/rx3-stems-index.txt.add && mv -f /tmp/rx3-stems-index.txt.add /tmp/rx3-stems-index.txt
+        } ;;
+esac
+risposta "200 OK" "fatto"

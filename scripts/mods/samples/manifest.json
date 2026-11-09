@@ -1,0 +1,156 @@
+{
+  "id": "samples",
+  "name": {
+    "en": "Samples",
+    "fr": "Samples"
+  },
+  "description": {
+    "en": "Turns RELEASE FX (SHIFT + SLIP LOOP) into a sampler: 8 pads per deck. Prepare the bank of each deck on the app’s Samples screen. Also plays the Snare Roll on BEAT FX when one is saved on the drive.",
+    "fr": "Transforme RELEASE FX (SHIFT + SLIP LOOP) en sampler : 8 pads par deck. Préparez la banque de chaque deck dans l’écran Samples de l’application. Joue aussi le Snare Roll sur BEAT FX s’il est enregistré sur la clé."
+  },
+  "firmwares": [
+    "1.19",
+    "1.20"
+  ],
+  "default": false,
+  "order": 42,
+  "category": "samples",
+  "runtime_directory": "samples",
+  "namespace": "samples",
+  "requires": [
+    "core"
+  ],
+  "conflicts": [],
+  "files": [
+    {
+      "source": "module.sh",
+      "target": "module.sh",
+      "executable": false
+    },
+    {
+      "source": "assets/samples-selected.rgb565",
+      "target": "samples-selected.rgb565",
+      "executable": false
+    },
+    {
+      "source": "assets/samples-selected-light.rgb565",
+      "target": "samples-selected-light.rgb565",
+      "executable": false
+    },
+    {
+      "source": "assets/samples-none-selected.rgb565",
+      "target": "samples-none-selected.rgb565",
+      "executable": false
+    },
+    {
+      "source": "assets/samples-none-selected-light.rgb565",
+      "target": "samples-none-selected-light.rgb565",
+      "executable": false
+    },
+    {
+      "source": "assets/samples-beatfx-selected.rgb565",
+      "target": "samples-beatfx-selected.rgb565",
+      "executable": false
+    },
+    {
+      "source": "assets/samples-beatfx-selected-light.rgb565",
+      "target": "samples-beatfx-selected-light.rgb565",
+      "executable": false
+    },
+    {
+      "source": "assets/samples-rmx-selected.rgb565",
+      "target": "samples-rmx-selected.rgb565",
+      "executable": false
+    },
+    {
+      "source": "assets/samples-rmx-selected-light.rgb565",
+      "target": "samples-rmx-selected-light.rgb565",
+      "executable": false
+    },
+    {
+      "source": "assets/samples-rmx-none-selected.rgb565",
+      "target": "samples-rmx-none-selected.rgb565",
+      "executable": false
+    },
+    {
+      "source": "assets/samples-rmx-none-selected-light.rgb565",
+      "target": "samples-rmx-none-selected-light.rgb565",
+      "executable": false
+    },
+    {
+      "source": "assets/samples-rmx-beatfx-selected.rgb565",
+      "target": "samples-rmx-beatfx-selected.rgb565",
+      "executable": false
+    },
+    {
+      "source": "assets/samples-rmx-beatfx-selected-light.rgb565",
+      "target": "samples-rmx-beatfx-selected-light.rgb565",
+      "executable": false
+    }
+  ],
+  "build_files": [
+    "rx3_samples_module.c",
+    "rx3_samples_decl.h",
+    "rx3_samples_feature.h",
+    "rx3_samples_config.h",
+    "rx3_samples_audio.h",
+    "rx3_samples_roll.h",
+    "rx3_samples_release.h",
+    "rx3_samples_fxrelease.h",
+    "rx3_samples_panel.h",
+    "rx3_samples_page.h",
+    "rx3_samples_state.h"
+  ],
+  "messages": {
+    "en": {
+      "sampleAccess.title": "Use samples",
+      "sampleAccess.press": "Press SHIFT + SLIP LOOP: RELEASE FX is now the sampler.",
+      "sampleAccess.play": "In RELEASE FX, press a pad to play its sample. Each deck plays its own bank.",
+      "sampleAccess.label": "Press SHIFT + SLIP LOOP: RELEASE FX is now the sampler.",
+      "sampleAccess.playing": "Play a sample",
+      "sampleAccess.pads": "Pads",
+      "sampleAccess.touch": "Touchscreen",
+      "sampleAccess.tap": "Tap",
+      "sampleAccess.drag": "Drag",
+      "sampleAccess.holdDrag": "Hold + drag",
+      "sampleAccess.touchLabel": "Open RELEASE FX with SHIFT + SLIP LOOP, play samples with the pads, then set their volume under SAMPLES on the touchscreen.",
+      "sampleAccess.padStep0": "Start in HOT CUE.",
+      "sampleAccess.padStep1": "Press SHIFT + SLIP LOOP: RELEASE FX is the sampler and the pads take the colours of your bank.",
+      "sampleAccess.padStep2": "Press a pad to play its sample.",
+      "sampleAccess.padStep3": "Samples play according to the mode chosen in the app.",
+      "sampleAccess.padStep4": "Choose another pad mode to leave the sampler without stopping playing sounds.",
+      "sampleAccess.touchStep0": "The pads start in HOT CUE. Press SHIFT + SLIP LOOP to open RELEASE FX.",
+      "sampleAccess.touchStep1": "RELEASE FX is the sampler: each pad plays the sample assigned to it in the app for that deck.",
+      "sampleAccess.touchStep2": "Press pad 1 to play its sample.",
+      "sampleAccess.touchStep3": "Tap SAMPLES on the touchscreen and drag the bar to adjust the volume.",
+      "sampleAccess.touchStep4": "Choose another pad mode to leave the sampler without stopping playing sounds.",
+      "sampleAccess.physicalPads": "Physical pads · DECK 1",
+      "sampleAccess.sample": "Sample {number}"
+    },
+    "fr": {
+      "sampleAccess.title": "Utiliser les samples",
+      "sampleAccess.press": "Appuyez sur SHIFT + SLIP LOOP : RELEASE FX est désormais le sampler.",
+      "sampleAccess.play": "Dans RELEASE FX, appuyez sur un pad pour jouer son sample. Chaque deck joue sa propre banque.",
+      "sampleAccess.label": "Appuyez sur SHIFT + SLIP LOOP : RELEASE FX est désormais le sampler.",
+      "sampleAccess.playing": "Jouer un sample",
+      "sampleAccess.pads": "Pads",
+      "sampleAccess.touch": "Écran tactile",
+      "sampleAccess.tap": "Toucher",
+      "sampleAccess.drag": "Glisser",
+      "sampleAccess.holdDrag": "Maintenir + glisser",
+      "sampleAccess.touchLabel": "Ouvrez RELEASE FX avec SHIFT + SLIP LOOP, jouez les samples avec les pads, puis réglez leur volume dans SAMPLES sur l’écran tactile.",
+      "sampleAccess.padStep0": "HOT CUE est le mode de départ.",
+      "sampleAccess.padStep1": "Appuyez sur SHIFT + SLIP LOOP : RELEASE FX est le sampler et les pads prennent les couleurs de votre banque.",
+      "sampleAccess.padStep2": "Appuyez sur un pad pour jouer son sample.",
+      "sampleAccess.padStep3": "Les samples jouent selon le mode choisi dans l’application.",
+      "sampleAccess.padStep4": "Choisissez un autre mode de pads pour quitter le sampler sans couper les sons en cours.",
+      "sampleAccess.touchStep0": "Les pads sont en HOT CUE. Appuyez sur SHIFT + SLIP LOOP pour ouvrir RELEASE FX.",
+      "sampleAccess.touchStep1": "RELEASE FX est le sampler : chaque pad joue le sample qui lui est attribué dans l’application pour ce deck.",
+      "sampleAccess.touchStep2": "Appuyez sur le pad 1 pour jouer son sample.",
+      "sampleAccess.touchStep3": "Touchez SAMPLES sur l’écran et glissez sur la barre pour régler le volume.",
+      "sampleAccess.touchStep4": "Choisissez un autre mode de pads pour quitter le sampler sans couper les sons en cours.",
+      "sampleAccess.physicalPads": "Pads physiques · DECK 1",
+      "sampleAccess.sample": "Sample {number}"
+    }
+  }
+}

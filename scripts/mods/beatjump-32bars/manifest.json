@@ -1,0 +1,31 @@
+{
+  "id": "beatjump-32bars",
+  "name": {
+    "en": "32-beat Beat Jump",
+    "fr": "Beat Jump de 32 temps"
+  },
+  "description": {
+    "en": "Jump back or forward 32 beats with Beat Jump pads 7 and 8, replacing the −8/+8 jumps.",
+    "fr": "Reculez ou avancez de 32 temps avec les pads 7 et 8 de Beat Jump, à la place des sauts de −8/+8."
+  },
+  "firmwares": [
+    "1.19",
+    "1.20"
+  ],
+  "default": false,
+  "order": 10,
+  "category": "beatjump",
+  "runtime_directory": "beatjump-32bars",
+  "namespace": "beatjump_32bars",
+  "requires": [
+    "decoder-sleep"
+  ],
+  "conflicts": [],
+  "files": [
+    {
+      "source": "module.sh",
+      "target": "module.sh",
+      "executable": false
+    }
+  ]
+}
