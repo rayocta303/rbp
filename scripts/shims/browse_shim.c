@@ -3,8 +3,7 @@
  * @file browse_shim.c
  * @brief Implementation of XDJ-RX3 Browse Mods:
  *        1. Touch Preview / Song Info Remember across reboots
- *        2. Custom Columns / Row Formatting (Hide Track Number, Expand Title)
- *        3. Camelot Key (Mixed-In-Key) notation override
+ *        (Key Mod & Custom Column shifting reverted/disabled as requested)
  *
  * Runs inside rbp via fbshim.so (RB_LD_PRELOAD).
  */
@@ -25,63 +24,24 @@
 #include "pointsrc.h"
 
 /* --- Target VMAs in /root/pdj/rbp (ARM32 EABI5) --- */
-#define ADDR_SET_SONGINFO      0x00113c78u  /* setSongInfo(int on) */
-#define ADDR_IS_SONGINFO_ON    0x00112e30u  /* IsSongInfoOn() */
-#define ADDR_UI_BROWSE         0x0326f8b8u  /* uiBrowse struct base */
-#define OFF_SONGINFO_FLAG      0x28u        /* *(uiBrowse + 0x28) = SongInfoOn */
-
-#define ADDR_SET_LINKSTATE     0x0018dca0u  /* ui_com_draw_SetLinkState(win, obj_id, state) */
-#define ADDR_SET_POS_LEFT      0x0018e2ccu  /* ui_com_draw_SetObjectPosLeft(win, obj_id, left) */
-#define ADDR_IS_KEY_MIXED      0x0010cf88u  /* UiBrowseComm_IsKeyDispStyleMixedInKey() */
+#define ADDR_SET_SONGINFO          0x00113c78u  /* setSongInfo(int on) */
+#define ADDR_IS_SONGINFO_ON        0x00112e30u  /* IsSongInfoOn() */
+#define ADDR_UI_BROWSE             0x0326f8b8u  /* uiBrowse struct base */
+#define OFF_SONGINFO_FLAG          0x28u        /* *(uiBrowse + 0x28) = SongInfoOn */
 
 /* Expected prologues (prevent patching unexpected binary versions) */
-#define PROLOGUE_SET_SONGINFO  0xE30F38B8u  /* movw r3, #0xf8b8 */
-#define PROLOGUE_SET_LINKSTATE 0xE3710001u  /* cmn r1, #1 */
-#define PROLOGUE_SET_POS_LEFT  0xE92D4038u  /* push {r3, r4, r5, lr} */
-#define PROLOGUE_IS_KEY_MIXED  0xE92D4070u  /* push {r4, r5, r6, lr} */
+#define PROLOGUE_SET_SONGINFO      0xE30F38B8u  /* movw r3, #0xf8b8 */
 
-#define STATE_DIR              "/opt/rblive4/settings"
-#define STATE_FILE_SONGINFO    STATE_DIR "/browse_songinfo.state"
-
-/* Track Number Object IDs in Left Browse List (12 rows) */
-static const int s_track_num_ids[12] = {
-    262, 254, 246, 238, 230, 222, 214, 206, 198, 190, 182, 174
-};
-
-/* Main Text Object IDs (ID_LINE_TEXT) in Left Browse List (12 rows) */
-static const int s_line_text_ids[12] = {
-    103, 100, 97, 94, 91, 88, 85, 82, 79, 76, 73, 70
-};
+#define STATE_DIR                  "/opt/rblive4/settings"
+#define STATE_FILE_SONGINFO        STATE_DIR "/browse_songinfo.state"
 
 /* Original function pointers (trampolines) */
 static void (*g_orig_setSongInfo)(int on) = NULL;
-static int  (*g_orig_SetLinkState)(void *win, int obj_id, int state) = NULL;
-static int  (*g_orig_SetObjectPosLeft)(void *win, int obj_id, int left) = NULL;
-static int  (*g_orig_IsKeyMixedInKey)(void) = NULL;
 
 /* Configuration knobs */
 static int g_songinfo_remember = 1;
-static int g_hide_trackno = 1;
-static int g_shift_left_px = 44;
-static int g_force_camelot = 1;
-
-static int is_track_num_id(int id)
-{
-    for (int i = 0; i < 12; i++) {
-        if (s_track_num_ids[i] == id)
-            return 1;
-    }
-    return 0;
-}
-
-static int is_line_text_id(int id)
-{
-    for (int i = 0; i < 12; i++) {
-        if (s_line_text_ids[i] == id)
-            return 1;
-    }
-    return 0;
-}
+static int g_force_camelot = 0;     /* Disabled / Reverted */
+static int g_hide_trackno = 0;      /* Disabled to prevent UI overlap */
 
 /* Save Song Info state to persistent storage */
 static void save_songinfo_state(int on)
@@ -124,41 +84,6 @@ static void hook_setSongInfo(int on)
         volatile uint32_t *p = (volatile uint32_t *)(ADDR_UI_BROWSE + OFF_SONGINFO_FLAG);
         *p = on ? 1 : 0;
     }
-}
-
-/* Hook for ui_com_draw_SetLinkState(void *win, int obj_id, int state) */
-static int hook_SetLinkState(void *win, int obj_id, int state)
-{
-    if (g_hide_trackno && is_track_num_id(obj_id)) {
-        /* Force track number column to stay hidden */
-        state = 0;
-    }
-    if (g_orig_SetLinkState)
-        return g_orig_SetLinkState(win, obj_id, state);
-    return 0;
-}
-
-/* Hook for ui_com_draw_SetObjectPosLeft(void *win, int obj_id, int left) */
-static int hook_SetObjectPosLeft(void *win, int obj_id, int left)
-{
-    if (g_hide_trackno && is_line_text_id(obj_id)) {
-        /* Shift track title/artist text leftwards into the freed track# space */
-        if (left >= g_shift_left_px)
-            left -= g_shift_left_px;
-    }
-    if (g_orig_SetObjectPosLeft)
-        return g_orig_SetObjectPosLeft(win, obj_id, left);
-    return 0;
-}
-
-/* Hook for UiBrowseComm_IsKeyDispStyleMixedInKey() */
-static int hook_IsKeyMixedInKey(void)
-{
-    if (g_force_camelot)
-        return 1; /* Force Camelot Alphanumeric key display */
-    if (g_orig_IsKeyMixedInKey)
-        return g_orig_IsKeyMixedInKey();
-    return 0;
 }
 
 /* Arm an instruction trampoline hook */
@@ -214,12 +139,11 @@ void browse_shim_init(void)
 {
     /* Load configuration from environment */
     g_songinfo_remember = env_flag("BROWSE_SONGINFO_REMEMBER", 1);
-    g_hide_trackno      = env_flag("BROWSE_HIDE_TRACKNO", 1);
-    g_shift_left_px     = env_flag("BROWSE_SHIFT_LEFT_PX", 44);
-    g_force_camelot     = env_flag("BROWSE_CAMELOT_KEY", 1);
+    g_hide_trackno      = env_flag("BROWSE_HIDE_TRACKNO", 0);
+    g_force_camelot     = env_flag("BROWSE_CAMELOT_KEY", 0);
 
-    pointsrc_log("browse_shim: init: songinfo_remember=%d hide_trackno=%d shift=%dpx camelot=%d",
-                 g_songinfo_remember, g_hide_trackno, g_shift_left_px, g_force_camelot);
+    pointsrc_log("browse_shim: init: songinfo_remember=%d hide_trackno=%d camelot=%d",
+                 g_songinfo_remember, g_hide_trackno, g_force_camelot);
 
     /* 1. Touch Preview / Song Info Remember hook */
     if (g_songinfo_remember) {
@@ -233,19 +157,8 @@ void browse_shim_init(void)
         pointsrc_log("browse_shim: pre-seeded Song Info state to %d", saved_state);
     }
 
-    /* 2. Custom Columns: Hide Track Number & Expand Title */
-    if (g_hide_trackno) {
-        install_arm_hook(ADDR_SET_LINKSTATE, PROLOGUE_SET_LINKSTATE,
-                         (void *)hook_SetLinkState, (void **)&g_orig_SetLinkState);
-        install_arm_hook(ADDR_SET_POS_LEFT, PROLOGUE_SET_POS_LEFT,
-                         (void *)hook_SetObjectPosLeft, (void **)&g_orig_SetObjectPosLeft);
-    }
-
-    /* 3. Camelot Key display override */
-    if (g_force_camelot) {
-        install_arm_hook(ADDR_IS_KEY_MIXED, PROLOGUE_IS_KEY_MIXED,
-                         (void *)hook_IsKeyMixedInKey, (void **)&g_orig_IsKeyMixedInKey);
-    }
+    /* Note: Key Mod and Custom Column coordinate shifting are disabled to ensure
+     * 100% native layout alignment with zero UI element overlapping. */
 }
 
 __attribute__((constructor))

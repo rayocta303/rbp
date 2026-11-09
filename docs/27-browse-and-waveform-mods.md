@@ -78,12 +78,25 @@ Tampilan bawaan baris track pada XDJ-RX3 memiliki lebar dan susunan kolom yang k
 Pioneer secara default sering kali menampilkan format Musical Key klasik (`Am`, `C`, `F#m`) tergantung pengaturan rekordbox USB. Kebanyakan DJ modern lebih memilih format numerik Camelot (`8A`, `8B`, `11B`) untuk harmonic mixing cepat.
 
 ### B. Analisis Teknis di `rbp`
-- **Fungsi**: `UiBrowseComm_IsKeyDispStyleMixedInKey` (`0x0010cf88`).
-  - Fungsi ini memeriksa setting dari media rekordbox: jika nilai kembalian `1`, sistem merender format Camelot / Mixed In Key; jika `0`, merender format Classic Key.
+- **Fungsi Utama**:
+  1. `UiBrowseComm_IsKeyDispStyleMixedInKey` (`0x0010cf88`):
+     - Memeriksa style setting rekordbox browse. Return `1` untuk Camelot, `0` untuk Classic.
+  2. `CmnFunc_CmnInfo_GetDevSetKeyCategoryDispStyle` (`0x00185a8c`):
+     - Dipanggil oleh **seluruh komponen rbp** (11 pemanggil: `GetAllRecFromDB`, `ReplaceKeyString`, `GetRightPrepareList`, `GetRightBrowseOneData`, `Dsql_getNewKeyName`, `ExecInformationJump`, dll).
+     - Mengembalikan nilai `2` untuk Alphanumeric / Camelot, atau `1` untuk Classic.
+  3. `DBCommon_CopyKeyNameStr` (`0x001411d0`):
+     - Rutin translasi string key dari database/metadata ke format tampilan sesuai parameter `style` (`r2 = 1` untuk Camelot).
+  4. `DBCommon_GetKeyName` (`0x001410f4`):
+     - Pencarian nama key langsung berdasarkan Key ID integer (`1`..`24`). Parameter `style = 1` memilih Camelot string.
+  5. `Pioneer Universal 24-Key Table` (`0x00515390`):
+     - Tabel global berisi 24 pasang pointer UTF-16LE `(classic_ptr, camelot_ptr)` dari `1A`/`Abm` hingga `12B`/`E`.
 
-### C. Desain Solusi
-- Hook pada fungsi `UiBrowseComm_IsKeyDispStyleMixedInKey` agar selalu mengembalikan nilai `1` (true).
-- Dengan demikian, seluruh Key di daftar lagu, tag list, playlist, dan matching screen otomatis ditampilkan dalam notasi Camelot (`1A`-`12B`).
+### C. Desain Solusi (5-Tier Universal Override)
+1. **Tier 1 (Browse Query)**: Hook `UiBrowseComm_IsKeyDispStyleMixedInKey` (`0x0010cf88`) return `1`.
+2. **Tier 2 (Global Device Setting)**: Hook `CmnFunc_CmnInfo_GetDevSetKeyCategoryDispStyle` (`0x00185a8c`) return `2` (Camelot mode untuk 11 modul pemanggil internal).
+3. **Tier 3 (String Translator)**: Hook `DBCommon_CopyKeyNameStr` (`0x001411d0`) memaksakan parameter `style = 1` pada saat pemanggilan.
+4. **Tier 4 (Direct Key Lookup)**: Hook `DBCommon_GetKeyName` (`0x001410f4`) memaksakan parameter `style = 1`.
+5. **Tier 5 (Memory Table Patch)**: Menimpa slot pointer `classic_ptr` pada tabel `0x00515390` di memory agar langsung menunjuk ke pointer `camelot_ptr`, menjamin keamanan 100% jika ada modul yang membaca tabel secara langsung.
 
 ---
 
