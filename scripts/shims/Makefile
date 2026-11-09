@@ -386,7 +386,7 @@ FBSHIM_OBJS := fb_shim.o tscfake.o pointsrc.o point_xform.o touch_zone.o \
                deckbadge_zone.o deckbadge_paint.o deckbadge_plane.o bpmbox_zone.o \
                settings_zone.o settings_paint.o \
                controllers.o usb_devices.o \
-               vidmask.o net_info.o ui_overlay.o browse_shim.o \
+               vidmask.o net_info.o ui_overlay.o \
                net_zone.o net_paint.o net_ui.o
 # controllers.o and usb_devices.o are here for ONE question the settings panel asks:
 # whether a recognised digital mixer is on the USB bus, which is what makes the MIXER
@@ -407,7 +407,7 @@ FBSHIM_HDRS := tscfake.h pointsrc.h point_xform.h touch_zone.h syscalls.h \
                fx_zone.h fx_paint.h hc_zone.h usb_label.h \
                fxpad_zone.h fxpad_paint.h pitch_state.h \
                settings_zone.h settings_paint.h controllers.h usb_devices.h \
-               net_info.h ui_overlay.h browse_shim.h \
+               net_info.h ui_overlay.h \
                net_zone.h net_paint.h net_ui.h
 
 fbshim.so: $(FBSHIM_OBJS) rbp_key.o fader_state.o rbp_transport.o pitch_state.o \
@@ -419,7 +419,6 @@ fbshim.so: $(FBSHIM_OBJS) rbp_key.o fader_state.o rbp_transport.o pitch_state.o 
 	    $(LDFLAGS)
 
 fb_shim.o: fb_shim.c pointsrc.h $(FBSHIM_HDRS)
-browse_shim.o: browse_shim.c browse_shim.h pointsrc.h envutil.h $(FBSHIM_HDRS)
 tscfake.o: tscfake.c tscfake.h pointsrc.h
 # An interposer has to look at the arguments it is handed — that is the job — so
 # glibc's `nonnull` on open()'s pathname and `access(write_only)` on poll()'s
