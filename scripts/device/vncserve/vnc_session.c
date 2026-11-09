@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -159,6 +160,31 @@ static struct client g_clients[VNC_MAX_CLIENTS];
 static struct vnc_input *g_input;
 static struct vnc_input_switch *g_input_sw;
 static int g_input_owner = -1;
+
+#define TARGET_TOUCH_SOCK "/tmp/xdj_touch_inject.sock"
+static int g_inject_sock_fd = -1;
+static struct sockaddr_un g_inject_target_addr;
+
+static void vnc_touch_inject_send(int x, int y, int touched)
+{
+    if (g_inject_sock_fd < 0) {
+        g_inject_sock_fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+        if (g_inject_sock_fd < 0)
+            return;
+        memset(&g_inject_target_addr, 0, sizeof(g_inject_target_addr));
+        g_inject_target_addr.sun_family = AF_UNIX;
+        strncpy(g_inject_target_addr.sun_path, TARGET_TOUCH_SOCK, sizeof(g_inject_target_addr.sun_path) - 1);
+    }
+    if (x < 0) x = 0;
+    if (x >= 1280) x = 1279;
+    if (y < 0) y = 0;
+    if (y >= 800) y = 799;
+
+    char buf[64];
+    int len = snprintf(buf, sizeof(buf), "%d,%d,%d\n", x, y, touched ? 1 : 0);
+    sendto(g_inject_sock_fd, buf, (size_t)len, 0,
+           (struct sockaddr *)&g_inject_target_addr, sizeof(g_inject_target_addr));
+}
 
 /* Can this client be sent a JPEG at all?
  *
@@ -785,19 +811,15 @@ static int handle_message(struct client *c, const uint8_t *p, size_t len)
         int buttons = p[1];
         int x = (int)(((unsigned)p[2] << 8) | p[3]);
         int y = (int)(((unsigned)p[4] << 8) | p[5]);
-        int live = g_input && g_input->fd >= 0 && g_input_sw && g_input_sw->on;
+        int live = g_input_sw && g_input_sw->on;
 
         /* ONE LINE PER EDGE. A click is two lines and a drag is two lines; logging every
          * report would be a hundred lines a second into a file on tmpfs, which is a
          * mistake this project has already made once (RB_VERBOSE in rb.conf). */
         if ((buttons & 1) && !(c->ptr_mask & 1)) {
-            int rx = 0, ry = 0;
-            if (g_input)
-                vnc_input_map(x, y, g_input->scr_w, g_input->scr_h,
-                              g_input->raw_w, g_input->raw_h, &rx, &ry);
-            vlog("%s: the mouse went down at (%d,%d), the panel's raw (%d,%d)%s",
-                 c->peer, x, y, rx, ry,
-                 live ? " -- a real press on the glass"
+            vlog("%s: the mouse went down at (%d,%d)%s",
+                 c->peer, x, y,
+                 live ? " -- touch press"
                       : " -- and input is off, so nothing was pressed");
             if (live)
                 g_input_owner = (int)(c - g_clients);
@@ -812,8 +834,11 @@ static int handle_message(struct client *c, const uint8_t *p, size_t len)
                  "no buttons, so only the left one does anything", c->peer, buttons);
         }
         c->ptr_mask = buttons;
-        if (live)
-            vnc_input_pointer(g_input, buttons, x, y, now_ms());
+        if (live) {
+            if (g_input && g_input->fd >= 0)
+                vnc_input_pointer(g_input, buttons, x, y, now_ms());
+            vnc_touch_inject_send(x, y, (buttons & 1));
+        }
         break;
     }
     case 6:                                   /* ClientCutText */
@@ -1096,9 +1121,11 @@ static void client_close(struct client *c)
      * failure of this feature that would need somebody to walk over and touch the
      * glass to clear. The slot has to be read before the memset below, and only the
      * client that actually pressed owns the finger. */
-    if (c->fd >= 0 && g_input && (int)(c - g_clients) == g_input_owner) {
+    if (c->fd >= 0 && (int)(c - g_clients) == g_input_owner) {
         g_input_owner = -1;
-        vnc_input_release(g_input);
+        if (g_input)
+            vnc_input_release(g_input);
+        vnc_touch_inject_send(0, 0, 0);
     }
     if (c->fd >= 0) close(c->fd);
     free(c->out);
@@ -1460,24 +1487,29 @@ int vnc_session_run(const struct vnc_session_opts *o)
                          "chooser rather than stopping anything.",
                          input.raw_w - 1);
                 } else {
-                    vlog("input: %s", ierr);
-                    vlog("*** vnc input was asked for and there is no panel to press; "
-                         "turning the switch back off. Set RB_VNC_INPUT_DEV if the "
-                         "panel is a node this program does not recognise.");
-                    vnc_input_switch_set(&insw, VNC_INPUT_OFF);
+                    static int s_logged_no_panel = 0;
+                    if (!s_logged_no_panel) {
+                        vlog("input: %s", ierr);
+                        vlog("vnc input: physical panel not found; remote touch active via %s",
+                             TARGET_TOUCH_SOCK);
+                        s_logged_no_panel = 1;
+                    }
                     g_input_owner = -1;
                 }
             }
-            if (!want_input && input.fd >= 0) {
-                /* The file says off -- or sharing does: put the finger up and let the
-                 * panel go. Closing costs nothing and turning it back on reopens, which
-                 * is what keeps "off" meaning off rather than merely idle. */
-                vnc_input_release(&input);
-                g_input_owner = -1;
-                vnc_input_close(&input);
-                vlog("input: the panel node is closed (%s)", live.on
-                     ? "the input switch says off"
-                     : "sharing is off, so there is no picture to click");
+            if (!want_input) {
+                if (input.fd >= 0) {
+                    /* The file says off -- or sharing does: put the finger up and let the
+                     * panel go. Closing costs nothing and turning it back on reopens, which
+                     * is what keeps "off" meaning off rather than merely idle. */
+                    vnc_input_release(&input);
+                    g_input_owner = -1;
+                    vnc_input_close(&input);
+                    vlog("input: the panel node is closed (%s)", live.on
+                         ? "the input switch says off"
+                         : "sharing is off, so there is no picture to click");
+                }
+                vnc_touch_inject_send(0, 0, 0);
             }
         }
 
@@ -1547,6 +1579,65 @@ int vnc_session_run(const struct vnc_session_opts *o)
                         if (errno != EINTR && errno != EAGAIN)
                             vlog("accept: %s", strerror(errno));
                     } else {
+                        /* Check if incoming client is a Web Browser (HTTP) */
+                        struct pollfd pfd;
+                        pfd.fd = fd;
+                        pfd.events = POLLIN;
+                        pfd.revents = 0;
+                        int pr = poll(&pfd, 1, 35);
+                        if (pr > 0 && (pfd.revents & POLLIN)) {
+                            char peek[16];
+                            ssize_t np = recv(fd, peek, sizeof(peek) - 1, MSG_PEEK);
+                            if (np >= 4 && (!memcmp(peek, "GET ", 4) ||
+                                            !memcmp(peek, "POST ", 5) ||
+                                            !memcmp(peek, "HEAD ", 5))) {
+                                char req[1024];
+                                ssize_t nr = recv(fd, req, sizeof(req) - 1, 0);
+                                if (nr > 0) req[nr] = '\0'; else req[0] = '\0';
+
+                                char host[128] = "unx.local";
+                                const char *hp = strstr(req, "Host: ");
+                                if (hp) {
+                                    hp += 6;
+                                    const char *he = strstr(hp, "\r\n");
+                                    if (he) {
+                                        int len = he - hp;
+                                        if (len > 0 && len < (int)sizeof(host)) {
+                                            memcpy(host, hp, len);
+                                            host[len] = '\0';
+                                            char *colon = strchr(host, ':');
+                                            if (colon) *colon = '\0';
+                                        }
+                                    }
+                                } else {
+                                    snprintf(host, sizeof(host), "%s", inet_ntoa(peer.sin_addr));
+                                }
+
+                                int target_port = 5903;
+                                if (strstr(req, "GET /config") || strstr(req, "GET /mode") || strstr(req, "GET /log")) {
+                                    target_port = o->http_port > 0 ? o->http_port : 5901;
+                                } else {
+                                    const char *wpe = getenv("RB_VNC_WEB_PORT");
+                                    if (wpe && atoi(wpe) > 0) target_port = atoi(wpe);
+                                }
+
+                                char resp[512];
+                                int rlen = snprintf(resp, sizeof(resp),
+                                    "HTTP/1.1 302 Found\r\n"
+                                    "Location: http://%s:%d/vnc.html?autoconnect=true&resize=scale\r\n"
+                                    "Content-Type: text/html\r\n"
+                                    "Connection: close\r\n"
+                                    "Content-Length: 95\r\n\r\n"
+                                    "<html><body>Redirecting to <a href=\"http://%s:%d/vnc.html?autoconnect=true&resize=scale\">noVNC</a>...</body></html>\r\n",
+                                    host, target_port, host, target_port);
+                                (void)write(fd, resp, rlen);
+                                close(fd);
+                                vlog("HTTP client from %s:%u -> redirected to http://%s:%d/",
+                                     inet_ntoa(peer.sin_addr), ntohs(peer.sin_port), host, target_port);
+                                continue;
+                            }
+                        }
+
                         int slot;
                         for (slot = 0; slot < VNC_MAX_CLIENTS && g_clients[slot].fd >= 0; slot++)
                             ;

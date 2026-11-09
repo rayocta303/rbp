@@ -38,12 +38,12 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-/* The card rbp's picture is actually on. NOT card0: recon measured card0 = v3d,
- * a render node with no CRTC at all, and card1 = vc4-drm, whose primary plane is
- * the framebuffer /dev/fb0 mmaps. Hardcoded rather than a knob because it is a
- * fact about the board; the A/B that matters is MENU_PLANE, which is the band's
- * route and lives in menu_draw.c. */
-#define DRM_BAND_CARD  "/dev/dri/card1"
+/* The card rbp's picture is actually on.
+ * On Amlogic S905X (meson-drm), card0 is the display controller.
+ * On Raspberry Pi (vc4-drm), card0 is v3d and card1 is vc4-drm.
+ * We probe card0 first, falling back to card1. */
+#define DRM_BAND_CARD_0  "/dev/dri/card0"
+#define DRM_BAND_CARD_1  "/dev/dri/card1"
 
 /* vc4's planes report 39 formats -- measured, and the reason a fixed 32-format
  * buffer cost a whole run in work/drmplane.c: GETPLANE returns EINVAL when
@@ -98,7 +98,8 @@ static struct {
     /* ...and THE RANK the next setup asks for -- see drm_band_want_rank(). */
     unsigned int want_rank;
     int failed;
-} g_dev = { -1, 0, { 0 }, 0, 0, 0 };
+    const char *card;
+} g_dev = { -1, 0, { 0 }, 0, 0, 0, DRM_BAND_CARD_0 };
 
 static int dev_acquire(void)
 {
@@ -112,11 +113,16 @@ static int dev_acquire(void)
         return g_dev.fd;
     }
 
-    g_dev.fd = real_open(DRM_BAND_CARD, O_RDWR | O_CLOEXEC, 0);
+    g_dev.card = DRM_BAND_CARD_0;
+    g_dev.fd = real_open(g_dev.card, O_RDWR | O_CLOEXEC, 0);
+    if (g_dev.fd < 0) {
+        g_dev.card = DRM_BAND_CARD_1;
+        g_dev.fd = real_open(g_dev.card, O_RDWR | O_CLOEXEC, 0);
+    }
     if (g_dev.fd < 0) {
         g_dev.failed = 1;
-        pointsrc_log("menu plane: open %s: %s -- the band stays on /dev/fb0",
-                     DRM_BAND_CARD, strerror(errno));
+        pointsrc_log("menu plane: open %s / %s failed: %s -- the band stays on /dev/fb0",
+                     DRM_BAND_CARD_0, DRM_BAND_CARD_1, strerror(errno));
         return -1;
     }
 
@@ -147,7 +153,7 @@ static int dev_acquire(void)
         g_dev.failed = 1;
         pointsrc_log("menu plane: SET_MASTER on %s: %s -- something else holds"
                      " the display; the band stays on /dev/fb0",
-                     DRM_BAND_CARD, strerror(errno));
+                     g_dev.card ? g_dev.card : "DRM card", strerror(errno));
         real_close(g_dev.fd);
         g_dev.fd = -1;
         return -1;
@@ -424,7 +430,7 @@ int drm_band_setup(struct drm_band *b, int w, int h, int bpp)
 
     if (live_crtc(fd, &crtc_id, &crtc_index) != 0) {
         pointsrc_log("menu plane: no CRTC on %s is scanning anything out",
-                     DRM_BAND_CARD);
+                     g_dev.card ? g_dev.card : "DRM card");
         drm_band_teardown(b);
         return -1;
     }

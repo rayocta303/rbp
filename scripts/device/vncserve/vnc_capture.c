@@ -205,7 +205,8 @@ struct vnc_geom {
  * READ EVERY FRAME, not on the plane list's 250 ms cadence: a drawer is *sliding*
  * while it opens, and a position sampled four times a second would make it jump. A
  * 10 KB text read is free at the few frames per second this serves. */
-#define VNC_DRM_STATE "/sys/kernel/debug/dri/1/state"
+#define VNC_DRM_STATE_0 "/sys/kernel/debug/dri/0/state"
+#define VNC_DRM_STATE_1 "/sys/kernel/debug/dri/1/state"
 
 struct vnc_capture {
     int fbfd;
@@ -270,7 +271,9 @@ static void refresh_geometry(struct vnc_capture *c)
     c->ngeom = 0;
     c->ncrtc_on = 0;
 
-    f = fopen(VNC_DRM_STATE, "r");
+    f = fopen(VNC_DRM_STATE_0, "r");
+    if (!f)
+        f = fopen(VNC_DRM_STATE_1, "r");
     if (!f) {
         c->state_err = errno;
         return;
@@ -677,10 +680,10 @@ struct vnc_capture *vnc_capture_open(char *err, size_t errlen)
     }
     c->fbsize = n;
 
-    /* Try card1, then card0 for DRM overlay planes; failure is non-fatal */
-    c->drmfd = open("/dev/dri/card1", O_RDWR | O_CLOEXEC);
+    /* Try card0 (Amlogic S905X), then card1 (Raspberry Pi) for DRM overlay planes; failure is non-fatal */
+    c->drmfd = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
     if (c->drmfd < 0)
-        c->drmfd = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
+        c->drmfd = open("/dev/dri/card1", O_RDWR | O_CLOEXEC);
 
     if (c->drmfd >= 0) {
         if (ioctl(c->drmfd, DRM_IOCTL_DROP_MASTER, NULL) == 0)
@@ -736,10 +739,10 @@ void vnc_capture_describe(struct vnc_capture *c)
 
     refresh_plane_list(c);
     refresh_geometry(c);
-    printf("card1: %d plane object(s)\n", c->nplane_ids);
-    printf("atomic capability: %s\n", c->no_atomic ? "REFUSED (vc4 is not an atomic driver)" : "accepted");
-    printf("geometry: %d plane(s) placed from " VNC_DRM_STATE "%s\n", c->ngeom,
-           c->state_err ? " -- UNREADABLE" : "");
+    printf("DRM: %d plane object(s)\n", c->nplane_ids);
+    printf("atomic capability: %s\n", c->no_atomic ? "REFUSED" : "accepted");
+    printf("geometry: %d plane(s) placed%s\n", c->ngeom,
+           c->state_err ? " (state unreadable)" : "");
     for (i = 0; i < c->nplane_ids; i++) {
         struct drm_mode_get_plane gp;
         uint32_t formats[VNC_MAX_FORMATS];
@@ -875,7 +878,7 @@ int vnc_capture_frame(struct vnc_capture *c, uint16_t *dst)
              c->bad_format    ? "; a plane is not RGB565"  : "",
              c->no_geometry   ? "; a plane had no readable placement" : "",
              (c->skipped_primary && c->state_err == 0) ? "" :
-                 (c->state_err ? "; " VNC_DRM_STATE " unreadable" : "; no primary plane seen"));
+                 (c->state_err ? "; DRM debugfs state unreadable" : "; no primary plane seen"));
 
     /* A frame that could not read a plane is still a frame -- the operator sees a
      * screen with a stale drawer rather than no screen at all. */

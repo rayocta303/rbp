@@ -84,6 +84,14 @@ if [ -f "$HERE/novnc_patch.py" ]; then
     python3 "$HERE/novnc_patch.py" "$ROOT" || true
 fi
 
+# Compatibility with XDJ-AZ port 5800: redirect port 5800 to noVNC web port ($PORT)
+if command -v iptables >/dev/null 2>&1; then
+    iptables -t nat -C PREROUTING -p tcp --dport 5800 -j REDIRECT --to-port "$PORT" 2>/dev/null || \
+    iptables -t nat -A PREROUTING -p tcp --dport 5800 -j REDIRECT --to-port "$PORT" 2>/dev/null || true
+    iptables -t nat -C OUTPUT -p tcp -o lo --dport 5800 -j REDIRECT --to-port "$PORT" 2>/dev/null || \
+    iptables -t nat -A OUTPUT -p tcp -o lo --dport 5800 -j REDIRECT --to-port "$PORT" 2>/dev/null || true
+fi
+
 # Binds the LAN, not loopback: the browser is on the other end of it. That is the same
 # exposure the RFB port already has, and no more -- the password is the viewer's.
 echo "webvnc-run: noVNC on :$PORT from $ROOT, bridging to 127.0.0.1:$VNC" >&2

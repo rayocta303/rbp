@@ -2047,8 +2047,23 @@ static int menu_fb_open_unlocked(int loud)
 
     len = fix.smem_len > 0 ? (long)fix.smem_len
                            : (long)g.view.pitch * g.view.fb_h * (g.view.bpp / 8);
-    g.view.pix = real_mmap(NULL, (size_t)len, PROT_READ | PROT_WRITE, MAP_SHARED,
-                           fd, 0);
+
+    extern void *g_real_fb;
+    extern size_t g_fb_len;
+    if (g_real_fb && g_fb_len >= (size_t)len) {
+        g.view.pix = g_real_fb;
+        if (loud)
+            pointsrc_log("menu: reusing real fb from fb_shim at %p (%zu bytes)", g_real_fb, g_fb_len);
+    } else {
+        g.view.pix = real_mmap(NULL, (size_t)len, PROT_READ | PROT_WRITE, MAP_SHARED,
+                               fd, 0);
+        if (g.view.pix != (void *)-1 && g.view.pix != NULL && !g_real_fb) {
+            g_real_fb = g.view.pix;
+            g_fb_len = (size_t)len;
+            if (loud)
+                pointsrc_log("menu: registered real fb for fb_shim at %p (%ld bytes)", g_real_fb, len);
+        }
+    }
     /* Not needed after the mapping: a shared mapping outlives the fd, and holding
      * it would leave the panel owning an fd forever. */
     real_close(fd);
@@ -2574,4 +2589,147 @@ int menu_draw_start(void)
     }
     pthread_detach(tid);
     return 0;
+}
+
+struct clip_rect {
+    int x0, y0, x1, y1;
+};
+
+void menu_present_frame(void *real_fb, const void *shadow_fb, int w, int h, int pitch_px, int bpp)
+{
+    if (!real_fb || !shadow_fb || w <= 0 || h <= 0 || pitch_px <= 0)
+        return;
+
+    int bytes_per_pixel = (bpp > 0) ? (bpp / 8) : 4;
+    size_t pitch_bytes = (size_t)pitch_px * bytes_per_pixel;
+    size_t total_fb_len = (size_t)h * pitch_bytes;
+
+    struct clip_rect rects[8];
+    int num_rects = 0;
+
+    /* 1. Beat FX Picker */
+    if (fxlist_is_open()) {
+        int x0, y0, x1, y1;
+        fxlist_box_rect(&x0, &y0, &x1, &y1);
+        if (x0 < x1 && y0 < y1) {
+            rects[num_rects++] = (struct clip_rect){ x0, y0, x1 + 1, y1 + 1 };
+        }
+    }
+
+    /* 2. Side Drawers (Left & Right) */
+    if (side_is_open(SZ_LEFT)) {
+        rects[num_rects++] = (struct clip_rect){ 0, 0, SZ_W, h };
+    }
+    if (side_is_open(SZ_RIGHT)) {
+        rects[num_rects++] = (struct clip_rect){ w - SZ_W, 0, w, h };
+    }
+
+    /* 3. Settings Box */
+    if (settings_is_open()) {
+        int x0, y0, x1, y1;
+        settings_box_rect(&x0, &y0, &x1, &y1);
+        if (x0 < x1 && y0 < y1) {
+            rects[num_rects++] = (struct clip_rect){ x0, y0, x1 + 1, y1 + 1 };
+        }
+    }
+
+    /* 4. Top Menu Band */
+    if (menu_is_open()) {
+        rects[num_rects++] = (struct clip_rect){ 0, 0, w, 56 };
+    }
+
+    static int s_was_any_open = 0;
+
+    /* Fast path: no overlays active */
+    if (num_rects == 0) {
+        memcpy(real_fb, shadow_fb, total_fb_len);
+        s_was_any_open = 0;
+        menu_frame_tick();
+        return;
+    }
+
+    s_was_any_open = 1;
+
+    /* Row-by-row clipped blit: exclude active overlay bounding boxes */
+    const unsigned char *src = (const unsigned char *)shadow_fb;
+    unsigned char *dst = (unsigned char *)real_fb;
+
+    for (int y = 0; y < h; y++) {
+        const unsigned char *src_row = src + (size_t)y * pitch_bytes;
+        unsigned char *dst_row = dst + (size_t)y * pitch_bytes;
+
+        int int_x0[8];
+        int int_x1[8];
+        int num_ints = 0;
+
+        for (int i = 0; i < num_rects; i++) {
+            if (y >= rects[i].y0 && y < rects[i].y1) {
+                int rx0 = rects[i].x0;
+                int rx1 = rects[i].x1;
+                if (rx0 < 0) rx0 = 0;
+                if (rx1 > w) rx1 = w;
+                if (rx0 < rx1) {
+                    int_x0[num_ints] = rx0;
+                    int_x1[num_ints] = rx1;
+                    num_ints++;
+                }
+            }
+        }
+
+        if (num_ints == 0) {
+            memcpy(dst_row, src_row, pitch_bytes);
+            continue;
+        }
+
+        /* Sort intervals by x0 */
+        for (int i = 1; i < num_ints; i++) {
+            int key0 = int_x0[i];
+            int key1 = int_x1[i];
+            int j = i - 1;
+            while (j >= 0 && int_x0[j] > key0) {
+                int_x0[j + 1] = int_x0[j];
+                int_x1[j + 1] = int_x1[j];
+                j--;
+            }
+            int_x0[j + 1] = key0;
+            int_x1[j + 1] = key1;
+        }
+
+        /* Merge intervals and copy unoccluded gaps */
+        int cur_x = 0;
+        int m_x0 = int_x0[0];
+        int m_x1 = int_x1[0];
+
+        for (int i = 1; i < num_ints; i++) {
+            if (int_x0[i] <= m_x1) {
+                if (int_x1[i] > m_x1)
+                    m_x1 = int_x1[i];
+            } else {
+                if (m_x0 > cur_x) {
+                    memcpy(dst_row + (size_t)cur_x * bytes_per_pixel,
+                           src_row + (size_t)cur_x * bytes_per_pixel,
+                           (size_t)(m_x0 - cur_x) * bytes_per_pixel);
+                }
+                cur_x = m_x1;
+                m_x0 = int_x0[i];
+                m_x1 = int_x1[i];
+            }
+        }
+
+        if (m_x0 > cur_x) {
+            memcpy(dst_row + (size_t)cur_x * bytes_per_pixel,
+                   src_row + (size_t)cur_x * bytes_per_pixel,
+                   (size_t)(m_x0 - cur_x) * bytes_per_pixel);
+        }
+        cur_x = m_x1;
+
+        if (w > cur_x) {
+            memcpy(dst_row + (size_t)cur_x * bytes_per_pixel,
+                   src_row + (size_t)cur_x * bytes_per_pixel,
+                   (size_t)(w - cur_x) * bytes_per_pixel);
+        }
+    }
+
+    /* Paint overlay graphics into real_fb */
+    menu_frame_tick();
 }

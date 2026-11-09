@@ -282,6 +282,18 @@ rm -f /tmp/displaywatch.geom
 [ -f "$RBP_LOG" ] && mv -f "$RBP_LOG" "$RBP_LOG.prev"
 [ -f "$EDB_LOG" ] && mv -f "$EDB_LOG" "$EDB_LOG.prev"
 
+# Ensure framebuffer double-buffering on Amlogic S905X (mesondrmfb)
+# yres_virtual >= 2 * yres enables DirectFB present_pan (flicker-free vsync flipping)
+if command -v fbset >/dev/null 2>&1 && [ -e /dev/fb0 ]; then
+    _cur_yres=$(fbset -fb /dev/fb0 2>/dev/null | awk '/geometry/ {print $3}')
+    if [ -n "$_cur_yres" ] && [ "$_cur_yres" -gt 0 ] 2>/dev/null; then
+        _target_vyres=$((_cur_yres * 2))
+        fbset -fb /dev/fb0 -vyres "$_target_vyres" 2>/dev/null || true
+    else
+        fbset -fb /dev/fb0 -vyres 1600 2>/dev/null || true
+    fi
+fi
+
 # --- 6. the shim environment -------------------------------------------------
 #
 # rb.conf's RB_<NAME> becomes <NAME> in the launched environment, which is the

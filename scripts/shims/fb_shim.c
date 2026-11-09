@@ -64,9 +64,19 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/sysmacros.h>
+#include <pthread.h>
 
 #define MAX_GPIO_FDS 256
 static char is_gpio_fd[MAX_GPIO_FDS];
+static char is_fb_fd[MAX_GPIO_FDS];
+
+void *g_real_fb = NULL;
+void *g_shadow_fb = NULL;
+size_t g_fb_len = 0;
+static pthread_mutex_t s_fb_shadow_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* The depth rbp is TOLD the fb is, and the line length that goes with it. 32 is
  * the DEFAULT, and it is what rbp is actually run at: it is the depth the
@@ -177,6 +187,30 @@ static void vsync_rate_tick(void)
     }
 }
 
+static int check_is_fb(int fd)
+{
+    if (fd < 0)
+        return 0;
+    if (fd < MAX_GPIO_FDS && is_fb_fd[fd])
+        return 1;
+    struct stat64 st;
+#if defined(SYS_fstat64)
+    if (syscall(SYS_fstat64, fd, &st) == 0 && S_ISCHR(st.st_mode) && major(st.st_rdev) == 29) {
+        if (fd < MAX_GPIO_FDS)
+            is_fb_fd[fd] = 1;
+        return 1;
+    }
+#elif defined(SYS_fstat)
+    struct stat st2;
+    if (syscall(SYS_fstat, fd, &st2) == 0 && S_ISCHR(st2.st_mode) && major(st2.st_rdev) == 29) {
+        if (fd < MAX_GPIO_FDS)
+            is_fb_fd[fd] = 1;
+        return 1;
+    }
+#endif
+    return 0;
+}
+
 int open(const char *pathname, int flags, ...)
 {
     mode_t mode = 0;
@@ -197,8 +231,12 @@ int open(const char *pathname, int flags, ...)
     if (pathname && strcmp(pathname, TSC_DEVICE_PATH) == 0)
         return tscfake_open();
     int fd = real_open(pathname, flags, mode);
-    if (fd >= 0 && fd < MAX_GPIO_FDS && pathname && strstr(pathname, "gpiodrv"))
-        is_gpio_fd[fd] = 1;
+    if (fd >= 0 && fd < MAX_GPIO_FDS && pathname) {
+        if (strstr(pathname, "gpiodrv"))
+            is_gpio_fd[fd] = 1;
+        if (strcmp(pathname, "/dev/fb0") == 0 || strcmp(pathname, "/dev/fb") == 0 || strstr(pathname, "fb0"))
+            is_fb_fd[fd] = 1;
+    }
     return fd;
 }
 
@@ -218,8 +256,12 @@ int open64(const char *pathname, int flags, ...)
     if (pathname && strcmp(pathname, TSC_DEVICE_PATH) == 0)
         return tscfake_open();
     int fd = real_open(pathname, flags | O_LARGEFILE, mode);
-    if (fd >= 0 && fd < MAX_GPIO_FDS && pathname && strstr(pathname, "gpiodrv"))
-        is_gpio_fd[fd] = 1;
+    if (fd >= 0 && fd < MAX_GPIO_FDS && pathname) {
+        if (strstr(pathname, "gpiodrv"))
+            is_gpio_fd[fd] = 1;
+        if (strcmp(pathname, "/dev/fb0") == 0 || strcmp(pathname, "/dev/fb") == 0 || strstr(pathname, "fb0"))
+            is_fb_fd[fd] = 1;
+    }
     return fd;
 }
 
@@ -236,11 +278,73 @@ ssize_t read(int fd, void *buf, size_t count)
 
 int close(int fd)
 {
-    if (fd >= 0 && fd < MAX_GPIO_FDS)
+    if (fd >= 0 && fd < MAX_GPIO_FDS) {
         is_gpio_fd[fd] = 0;
+        is_fb_fd[fd] = 0;
+    }
     if (tscfake_is_fd(fd))
         return tscfake_close(fd);
     return real_close(fd);
+}
+
+void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
+{
+    if (check_is_fb(fd) && (prot & PROT_WRITE) && length >= 2048000) {
+        pthread_mutex_lock(&s_fb_shadow_mutex);
+        if (!g_real_fb) {
+            g_real_fb = real_mmap(NULL, length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+            g_fb_len = length;
+            pointsrc_log("fb_shim: mapped real fb (%zu bytes) at %p", length, g_real_fb);
+        }
+        if (!g_shadow_fb) {
+            g_shadow_fb = real_mmap(NULL, length, PROT_READ | PROT_WRITE,
+                                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+            if (g_shadow_fb && g_shadow_fb != MAP_FAILED) {
+                memset(g_shadow_fb, 0, length);
+                pointsrc_log("fb_shim: shadow buffer active (%zu bytes) at %p -- flicker-free double buffering enabled",
+                             length, g_shadow_fb);
+            }
+        }
+        pthread_mutex_unlock(&s_fb_shadow_mutex);
+        if (g_shadow_fb && g_shadow_fb != MAP_FAILED) {
+            return g_shadow_fb;
+        }
+    }
+    return real_mmap(addr, length, prot, flags, fd, (unsigned long long)offset);
+}
+
+void *mmap64(void *addr, size_t length, int prot, int flags, int fd, off64_t offset)
+{
+    if (check_is_fb(fd) && (prot & PROT_WRITE) && length >= 2048000) {
+        pthread_mutex_lock(&s_fb_shadow_mutex);
+        if (!g_real_fb) {
+            g_real_fb = real_mmap(NULL, length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+            g_fb_len = length;
+            pointsrc_log("fb_shim: mapped real fb64 (%zu bytes) at %p", length, g_real_fb);
+        }
+        if (!g_shadow_fb) {
+            g_shadow_fb = real_mmap(NULL, length, PROT_READ | PROT_WRITE,
+                                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+            if (g_shadow_fb && g_shadow_fb != MAP_FAILED) {
+                memset(g_shadow_fb, 0, length);
+                pointsrc_log("fb_shim: shadow buffer active (%zu bytes) at %p -- flicker-free double buffering enabled",
+                             length, g_shadow_fb);
+            }
+        }
+        pthread_mutex_unlock(&s_fb_shadow_mutex);
+        if (g_shadow_fb && g_shadow_fb != MAP_FAILED) {
+            return g_shadow_fb;
+        }
+    }
+    return real_mmap(addr, length, prot, flags, fd, (unsigned long long)offset);
+}
+
+int munmap(void *addr, size_t length)
+{
+    if (addr == g_shadow_fb && g_shadow_fb != NULL) {
+        return 0;
+    }
+    return (int)syscall(SYS_munmap, addr, length);
 }
 
 int poll(struct pollfd *fds, nfds_t nfds, int timeout)
@@ -327,22 +431,12 @@ int ioctl(int fd, unsigned long request, ...)
     case FBIOPUT_VSCREENINFO:
         return 0;
     case FBIO_WAITFORVSYNC:
-        /* The frame boundary rbp actually drives its render loop from on this unit
-         * -- measured at 57.1/s -- and, unlike the pan below, the boundary that is
-         * really reached. menu_frame_tick() runs BEFORE the wait, not after, and
-         * that is the whole reason this is the right side of rbp's frame: whether
-         * the loop is `draw; wait` or `wait; draw`, the entry of the wait comes
-         * immediately after a completed draw, so the panel is composited just
-         * after rbp has finished a frame and then has the whole inter-frame gap to
-         * itself. Painting after the wait would put it immediately before the next
-         * draw, i.e. under it. menu_draw.c has the rest.
-         *
-         * The counter first, and it is the same frame boundary read as a rate:
-         * with FB_VSYNC_RATE set this prints one "vsync: N frames in M ms" line
-         * per second -- on rbp's own render thread, so the number is the rate
-         * frames arrive at, not a rate inferred from CPU. */
+        if (g_real_fb && g_shadow_fb && g_fb_len > 0) {
+            menu_present_frame(g_real_fb, g_shadow_fb, 1280, 800, 1280, fb_lie_bpp());
+        } else {
+            menu_frame_tick();
+        }
         vsync_rate_tick();
-        menu_frame_tick();
         /* THE VIDEO MASK, AND IT BELONGS HERE RATHER THAN IN menu_frame_tick(), which is the
          * mistake this line fixes. That function runs from TWO threads, and the second is a
          * builder loop whose period is POINT_MENU_MS -- shipped at 0.1 ms, i.e. ~8,900 calls a
@@ -355,6 +449,11 @@ int ioctl(int fd, unsigned long request, ...)
         vidmask_tick();
         return real_ioctl(fd, request, arg);
     case FBIOPAN_DISPLAY: {
+        if (g_real_fb && g_shadow_fb && g_fb_len > 0) {
+            menu_present_frame(g_real_fb, g_shadow_fb, 1280, 800, 1280, fb_lie_bpp());
+        } else {
+            menu_frame_tick();
+        }
         long pace_ns = pan_pacer_ns();
         if (pace_ns > 0) {
             static struct timespec last_pan;

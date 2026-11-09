@@ -36,4 +36,8 @@ int menu_draw_start(void);
  * idempotent. */
 void menu_frame_tick(void);
 
+/* Present shadow_fb to real_fb while clipping out active overlays (X11-style clipping).
+ * Prevents background wipes from flickering active overlays on single-buffered fb0. */
+void menu_present_frame(void *real_fb, const void *shadow_fb, int w, int h, int pitch_px, int bpp);
+
 #endif /* RBPI4B_MENU_DRAW_H */

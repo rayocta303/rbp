@@ -10,42 +10,61 @@ a set of anchors that does not match is LOGGED AND SURVIVED -- the client must n
 by a page tweak. The stamp each file gains at the end is what makes a re-run cheap and quiet, and
 what makes an upgraded (replaced) file get patched again rather than skipped.
 
-The three edits, all the operator's ask on 2026-10-10:
-
-  1. THE DOT CURSOR IS ALWAYS ON, in vnc_lite.html. That page draws NO cursor at all when the
-     server has not drawn one -- and on this unit the server is rbp, which does not -- so the
-     operator's pointer is invisible and the picture looks dead. RFB's `showDotCursor` draws a
-     dot instead, which is also what macOS Screen Sharing does with a client-side cursor.
-  2. THE Ctrl-Alt-Del BUTTON GOES, in vnc_lite.html. Nothing on this unit answers Ctrl-Alt-Del --
-     rbp is a DJ player, not a desktop -- and the button sits over the picture on a page whose
-     entire job is the picture. Its CSS, its handler and its function go with it, so no dead code
-     is left behind claiming a feature.
-  3. THE "Running without HTTPS" WARNING GOES, in app/ui.js. This unit serves the client over
-     plain HTTP on the LAN by design; the warning is not a finding, it is the permanent state of
-     a working install, printed in red across the top of every page load. The `isSecureContext`
-     test went with it rather than being left as a silent `if` -- a check whose only effect was
-     the message is not a check worth keeping.
+The edits:
+  1. CROSSHAIR '+' CURSOR: Replace the 3x3 dot in RFB.cursors.dot with a high-contrast 9x9 '+'
+     crosshair cursor with black contrast outline and white center (matching XDJ-AZ).
+  2. DEFAULT CROSSHAIR CSS: Force canvas and container to show cursor: crosshair !important.
+  3. CURSOR.JS DEFAULT: When clearing cursor image, fallback to 'crosshair' instead of 'none'.
+  4. SHOW_DOT TRUE BY DEFAULT: In app/ui.js, defaults.json and mandatory.json.
+  5. AUTOCONNECT & SCALE: Connects immediately upon loading page.
+  6. REMOVE Ctrl-Alt-Del & HTTPS Warning.
 
 Usage: novnc_patch.py [root]      (default /usr/share/novnc)
 Exit is always 0: a failure here is a page that is unpatched, never a client that is down.
 """
+import json
 import os
 import shutil
 import sys
 
-STAMP = "patched by novnc_patch.py v1"
-
-# --- the edits. `old` must appear EXACTLY ONCE, or the edit is refused and said so. ---
+STAMP = "patched by novnc_patch.py v2"
 
 LITE = "vnc_lite.html"
 UI = "app/ui.js"
+RFB = "core/rfb.js"
+CURSOR = "core/util/cursor.js"
+BASE_CSS = "app/styles/base.css"
+
+CROSSHAIR_PIXELS = """        /* eslint-disable indent */
+        rgbaPixels: new Uint8Array([
+              0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 255, 255, 255, 255, 255,   0,   0,   0, 255,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+              0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 255, 255, 255, 255, 255,   0,   0,   0, 255,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+              0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 255, 255, 255, 255, 255,   0,   0,   0, 255,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+              0,   0,   0, 255,   0,   0,   0, 255,   0,   0,   0, 255,   0,   0,   0, 255, 255, 255, 255, 255,   0,   0,   0, 255,   0,   0,   0, 255,   0,   0,   0, 255,   0,   0,   0, 255,
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+              0,   0,   0, 255,   0,   0,   0, 255,   0,   0,   0, 255,   0,   0,   0, 255, 255, 255, 255, 255,   0,   0,   0, 255,   0,   0,   0, 255,   0,   0,   0, 255,   0,   0,   0, 255,
+              0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 255, 255, 255, 255, 255,   0,   0,   0, 255,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+              0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 255, 255, 255, 255, 255,   0,   0,   0, 255,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+              0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 255, 255, 255, 255, 255,   0,   0,   0, 255,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+        ]),
+        /* eslint-enable indent */
+        w: 9, h: 9,
+        hotx: 4, hoty: 4,"""
+
+OLD_DOT_PIXELS = """        /* eslint-disable indent */
+        rgbaPixels: new Uint8Array([
+            255, 255, 255, 255,   0,   0,   0, 255, 255, 255, 255, 255,
+              0,   0,   0, 255,   0,   0,   0,   0,   0,   0,  0,  255,
+            255, 255, 255, 255,   0,   0,   0, 255, 255, 255, 255, 255,
+        ]),
+        /* eslint-enable indent */
+        w: 3, h: 3,
+        hotx: 1, hoty: 1,"""
 
 EDITS = [
     (LITE, "the dot cursor is always on",
      "                      { credentials: { password: password } });",
      "                      { credentials: { password: password },\n"
-     "                        // ALWAYS ON: rbp draws no cursor of its own, so without this\n"
-     "                        // the pointer is invisible. See scripts/device/novnc_patch.py.\n"
      "                        showDotCursor: true });"),
 
     (LITE, "the Send CtrlAltDel button's CSS",
@@ -90,23 +109,78 @@ EDITS = [
         }
 
 """, ""),
+
+    (UI, "autoconnect and scale by default",
+     """        UI.initSetting('autoconnect', false);
+        UI.initSetting('view_clip', false);
+        UI.initSetting('resize', 'off');""",
+     """        UI.initSetting('autoconnect', true);
+        UI.initSetting('view_clip', false);
+        UI.initSetting('resize', 'scale');"""),
+
+    (UI, "show_dot true default",
+     "        UI.initSetting('show_dot', false);",
+     "        UI.initSetting('show_dot', true);"),
+
+    (RFB, "replace dot with crosshair '+' pointer",
+     OLD_DOT_PIXELS,
+     CROSSHAIR_PIXELS),
+
+    (CURSOR, "default crosshair cursor on clear",
+     "        this._target.style.cursor = 'none';",
+     "        this._target.style.cursor = 'crosshair';"),
+
+    (BASE_CSS, "crosshair cursor on canvas",
+     "/*\n * noVNC base CSS",
+     "#noVNC_container canvas, #noVNC_canvas, canvas {\n    cursor: crosshair !important;\n}\n\n/*\n * noVNC base CSS"),
 ]
 
-# Where the stamp goes in each file, so a re-run is one line rather than a re-scan of the anchors:
-# before </body> in the page, at the end of the module. Both are comments the browser and the
-# engine skip, and neither can be mistaken for upstream text.
 STAMPS = {
     LITE: ("</body>", "<!-- %s; see scripts/device/novnc_patch.py -->\n</body>"),
     UI: ("", "\n// %s; see scripts/device/novnc_patch.py\n"),
+    RFB: ("", "\n// %s; see scripts/device/novnc_patch.py\n"),
+    CURSOR: ("", "\n// %s; see scripts/device/novnc_patch.py\n"),
+    BASE_CSS: ("", "\n/* %s; see scripts/device/novnc_patch.py */\n"),
 }
 
 
+def patch_json_configs(root, report):
+    for fname in ("defaults.json", "mandatory.json"):
+        fpath = os.path.join(root, fname)
+        try:
+            data = {}
+            if os.path.exists(fpath):
+                with open(fpath, "r", encoding="utf-8") as f:
+                    try:
+                        data = json.load(f)
+                    except Exception:
+                        data = {}
+            changed = False
+            if fname == "defaults.json":
+                for k, v in [("autoconnect", True), ("resize", "scale"), ("show_dot", True)]:
+                    if data.get(k) != v:
+                        data[k] = v
+                        changed = True
+            elif fname == "mandatory.json":
+                if data.get("show_dot") != True:
+                    data["show_dot"] = True
+                    changed = True
+            if changed or not os.path.exists(fpath):
+                with open(fpath, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+                report.append("%s: updated with show_dot: true" % fname)
+        except Exception as e:
+            report.append("%s: could not update (%s)" % (fname, e))
+
+
 def patch(root, report):
+    patch_json_configs(root, report)
+
     by_file = {}
     for rel, what, old, new in EDITS:
         by_file.setdefault(rel, []).append((what, old, new))
 
-    for rel in (LITE, UI):
+    for rel in by_file.keys():
         path = os.path.join(root, rel)
         try:
             with open(path, "r", encoding="utf-8", errors="surrogateescape") as f:
@@ -122,24 +196,26 @@ def patch(root, report):
         pending = list(by_file.get(rel, []))
         applied, refused = [], []
         for what, old, new in pending:
+            if new in text:
+                continue
             n = text.count(old)
             if n == 0:
-                refused.append("%s: NOT FOUND, this is not the noVNC these edits were written "
-                               "against" % what)
+                refused.append("%s: NOT FOUND" % what)
                 continue
             if n > 1:
-                refused.append("%s: appears %d times, refusing an ambiguous edit" % (what, n))
+                refused.append("%s: appears %d times, refusing ambiguous edit" % (what, n))
                 continue
             text = text.replace(old, new)
             applied.append(what)
 
+        if not applied and not refused:
+            continue
+
         if refused:
-            # Nothing is written: a half-patched page is worse than an unpatched one, and the
-            # refusals above name what to re-derive.
             report.append("%s: LEFT ALONE -- %s" % (rel, "; ".join(refused)))
             continue
 
-        anchor, stamp = STAMPS[rel]
+        anchor, stamp = STAMPS.get(rel, ("", "\n// %s\n"))
         if anchor:
             if text.count(anchor) != 1:
                 report.append("%s: no single %s to stamp before -- LEFT ALONE" % (rel, anchor))
@@ -151,7 +227,7 @@ def patch(root, report):
         try:
             backup = path + ".rbpi4b-orig"
             if not os.path.exists(backup):
-                shutil.copy2(path, backup)          # once, and never overwritten
+                shutil.copy2(path, backup)
             with open(path, "w", encoding="utf-8", errors="surrogateescape") as f:
                 f.write(text)
         except OSError as e:
@@ -168,7 +244,7 @@ def main():
     report = []
     try:
         patch(root, report)
-    except Exception as e:                                  # never take the client down
+    except Exception as e:
         report.append("unexpected failure: %s" % e)
     for line in report:
         print("novnc_patch: %s" % line, file=sys.stderr)

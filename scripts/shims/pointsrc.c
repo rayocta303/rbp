@@ -72,6 +72,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/un.h>
 
 /* --- the kernel's input ABI, declared here rather than taken from
  * <linux/input.h> ----------------------------------------------------------
@@ -2272,7 +2275,7 @@ static void bb_fire(int deck)
     send_rx_key(K_SYNC, OP_RELEASE, deck + 1, 0);
 }
 
-static void pointer_report(int down, int x, int y, int allow_menu, int held_ms)
+static void pointer_report_internal(int down, int x, int y, int allow_menu, int held_ms)
 {
     int button = 0;
     int verdict = MZ_FEED_NONE;
@@ -2670,6 +2673,15 @@ static void pointer_report(int down, int x, int y, int allow_menu, int held_ms)
     /* ...and this is the only line that publishes a finger of rbp's own. A TAKEN report
      * above leaves rbp's belief alone on purpose: the shim swallowed that report, rbp
      * never saw it, and its belief is still whatever the last forwarded report said. */
+}
+
+static pthread_mutex_t s_pointer_report_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static void pointer_report(int down, int x, int y, int allow_menu, int held_ms)
+{
+    pthread_mutex_lock(&s_pointer_report_mutex);
+    pointer_report_internal(down, x, y, allow_menu, held_ms);
+    pthread_mutex_unlock(&s_pointer_report_mutex);
 }
 
 /* THE SECOND CONTACT, AND THE ONLY THING IN THIS SHIM THAT IS TWO-HANDED.
@@ -3292,6 +3304,91 @@ static void *reader_thread(void *arg)
     return NULL;
 }
 
+#define TOUCH_INJECT_SOCK_PATH "/tmp/xdj_touch_inject.sock"
+static pthread_t inject_tid;
+static int inject_started = 0;
+
+static void *touch_inject_thread(void *arg)
+{
+    (void)arg;
+    unlink(TOUCH_INJECT_SOCK_PATH);
+    int sfd = socket(AF_UNIX, SOCK_DGRAM, 0);
+    if (sfd < 0) {
+        pointsrc_log("pointsrc: failed to create touch inject socket: %s", strerror(errno));
+        return NULL;
+    }
+
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, TOUCH_INJECT_SOCK_PATH, sizeof(addr.sun_path) - 1);
+    if (bind(sfd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        pointsrc_log("pointsrc: failed to bind touch inject socket to %s: %s",
+                     TOUCH_INJECT_SOCK_PATH, strerror(errno));
+        close(sfd);
+        return NULL;
+    }
+    chmod(TOUCH_INJECT_SOCK_PATH, 0666);
+    pointsrc_log("pointsrc: touch inject server listening on %s", TOUCH_INJECT_SOCK_PATH);
+
+    char buf[64];
+    int is_down = 0;
+    unsigned long long down_ms = 0;
+    int last_x = POINT_LOGICAL_W / 2, last_y = POINT_LOGICAL_H / 2;
+
+    while (1) {
+        ssize_t n = recv(sfd, buf, sizeof(buf) - 1, 0);
+        if (n <= 0) {
+            usleep(5000);
+            continue;
+        }
+        buf[n] = '\0';
+        int x = 0, y = 0, touched = 0;
+        if (sscanf(buf, "%d,%d,%d", &x, &y, &touched) >= 3) {
+            if (x < 0) x = 0;
+            if (x >= POINT_LOGICAL_W) x = POINT_LOGICAL_W - 1;
+            if (y < 0) y = 0;
+            if (y >= POINT_LOGICAL_H) y = POINT_LOGICAL_H - 1;
+
+            if (touched) {
+                if (!is_down) {
+                    down_ms = shim_now_ms();
+                    is_down = 1;
+                    if (log_debug)
+                        pointsrc_log("pointsrc: inject down at (%d,%d)", x, y);
+                } else {
+                    if (log_debug)
+                        pointsrc_log("pointsrc: inject drag to (%d,%d)", x, y);
+                }
+                last_x = x;
+                last_y = y;
+                st_cursor_x = x;
+                st_cursor_y = y;
+                st_down = 1;
+                pointer_report(1, x, y, menu_enabled, 0);
+            } else {
+                if (is_down) {
+                    unsigned long long now = shim_now_ms();
+                    unsigned long long elapsed = now - down_ms;
+                    if (elapsed < 60) {
+                        usleep((useconds_t)(60 - elapsed) * 1000);
+                        elapsed = 60;
+                    }
+                    if (log_debug)
+                        pointsrc_log("pointsrc: inject up at (%d,%d) held %llums",
+                                     last_x, last_y, elapsed);
+                    pointer_report(0, last_x, last_y, menu_enabled, (int)elapsed);
+                    is_down = 0;
+                    st_down = 0;
+                }
+            }
+        }
+    }
+    close(sfd);
+    unlink(TOUCH_INJECT_SOCK_PATH);
+    return NULL;
+}
+
 int pointsrc_start(void)
 {
     log_debug = env_flag("POINT_DEBUG", 0);
@@ -3299,38 +3396,30 @@ int pointsrc_start(void)
     menu_enabled = env_flag("POINT_MENU", 1);
     menu_mouse = env_flag("POINT_MENU_MOUSE", 0);
     fx_touch = env_flag("POINT_FX_TOUCH", 1);
-    /* The HOT CUE pad row's own switch, for fx_touch's reason: it is rbp's own drawing
-     * rather than a shim surface. Off means rbp's stream is untouched at those sixteen
-     * cells, byte for byte. */
     hc_touch = env_flag("POINT_HOTCUE_TOUCH", 1);
-    /* The pad-mode caption's own switch, for hc_touch's reason. */
     pm_touch = env_flag("POINT_PADMODE_TAP", 1);
-    /* ...and the deck badge's. */
     db_touch = env_flag("POINT_DECK_PLAY", 1);
-    /* ...and the BPM box's. */
     bb_touch = env_flag("POINT_BPM_SYNC", 1);
-    /* menu_key_eff is built even when the menu is off, so the log states the
-     * table it would use rather than staying silent about a knob that was set. */
     menu_keys_init();
     if (!menu_enabled)
-        menu_reset();      /* off means closed, whatever the state was */
+        menu_reset();
     if (!menu_enabled)
-        side_reset_all();  /* and the same for the drawers: POINT_MENU=0 is rbp's
-                            * untouched stream, and a drawer cannot be opened while
-                            * it is set -- the funnel never offers it a report */
+        side_reset_all();
     if (!menu_enabled)
-        side_nudge_sync();  /* and put back any tempo a held nudge cell left moved:
-                             * this runs at start-up, where "the drawer was reset"
-                             * has to mean "so was the fader" */
+        side_nudge_sync();
     if (!menu_enabled)
-        util_reset();      /* and the UTILITY gesture: it is offered the same
-                            * reports as the rest of the menu, so POINT_MENU=0
-                            * turns it off too and must not leave a press latched
-                            * for whenever it is turned back on */
+        util_reset();
     if (!menu_enabled)
-        wave_reset();      /* and the waveform swipe: it is offered the same reports
-                            * and gated on the same switch, so POINT_MENU=0 must leave
-                            * nothing anchored behind it either */
+        wave_reset();
+
+    if (!inject_started) {
+        if (pthread_create(&inject_tid, NULL, touch_inject_thread, NULL) == 0) {
+            inject_started = 1;
+        } else {
+            pointsrc_log("pointsrc: failed to start touch inject thread: %s", strerror(errno));
+        }
+    }
+
     if (reader_started)
         return 0;
     /* POINT_KIND=none means "no pointer at all" — the display-only bring-up
