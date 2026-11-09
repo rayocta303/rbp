@@ -34,6 +34,7 @@
 #include "settings_zone.h"  /* the SETTINGS panel: the gear in the band raises it, and the
                              * mixer route, USB STOP and the viewer's three switches
                              * live in it. The operator's ask of 2026-10-14 */
+#include "net_ui.h"         /* OS Network & Wireless Settings overlay */
 #include "usb_devices.h"    /* mixer_present(): the single walk of /sys/bus/usb/devices,
                              * asked here for the one thing the panel cannot infer -- whether
                              * a recognised digital mixer is on the bus, which is what makes
@@ -2291,6 +2292,13 @@ static void pointer_report_internal(int down, int x, int y, int allow_menu, int 
      * writes no record -- rbp's own widget handling is not a command the shim
      * gave it. */
     keylog_from("touch");
+
+    /* THE OS NETWORK & WIRELESS SETTINGS OVERLAY:
+     * Only active on the performance screen with no menu or drawer in front. */
+    if (rbp_perf_screen() && !menu_is_open() && !side_any_open()) {
+        if (net_ui_touch(down, x, y))
+            return;
+    }
 
     /* THE SETTINGS PANEL, before the chooser and everything else, and unconditionally --
      * the same rule the chooser's own block below states: while a box is up it owns every

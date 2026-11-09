@@ -140,6 +140,7 @@
 #include "rbp_key.h"
 #include "rbp_abi.h"
 #include "ui_overlay.h"
+#include "net_ui.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -2636,6 +2637,16 @@ void menu_present_frame(void *real_fb, const void *shadow_fb, int w, int h, int 
     /* 4. Top Menu Band */
     if (menu_is_open()) {
         rects[num_rects++] = (struct clip_rect){ 0, 0, w, 56 };
+    }
+
+    /* 5. Network Settings Overlay & Top Bar Strip Pill:
+     * ONLY active on the Performance Screen (waveform view)!
+     * On Browse, Source, Utility, etc. do NOT clip so rbp's native UI is never overwritten. */
+    if (rbp_perf_screen()) {
+        rects[num_rects++] = (struct clip_rect){ 936, 6, 1068, 44 };
+        if (net_ui_is_open()) {
+            rects[num_rects++] = (struct clip_rect){ 0, 50, w, 580 };
+        }
     }
 
     static int s_was_any_open = 0;

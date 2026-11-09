@@ -386,7 +386,8 @@ FBSHIM_OBJS := fb_shim.o tscfake.o pointsrc.o point_xform.o touch_zone.o \
                deckbadge_zone.o deckbadge_paint.o deckbadge_plane.o bpmbox_zone.o \
                settings_zone.o settings_paint.o \
                controllers.o usb_devices.o \
-               vidmask.o net_info.o ui_overlay.o browse_shim.o
+               vidmask.o net_info.o ui_overlay.o browse_shim.o \
+               net_zone.o net_paint.o net_ui.o
 # controllers.o and usb_devices.o are here for ONE question the settings panel asks:
 # whether a recognised digital mixer is on the USB bus, which is what makes the MIXER
 # ROUTE row operable ("refuse the tap", settings_zone.h). It is the same pair audioshim.so
@@ -406,7 +407,8 @@ FBSHIM_HDRS := tscfake.h pointsrc.h point_xform.h touch_zone.h syscalls.h \
                fx_zone.h fx_paint.h hc_zone.h usb_label.h \
                fxpad_zone.h fxpad_paint.h pitch_state.h \
                settings_zone.h settings_paint.h controllers.h usb_devices.h \
-               net_info.h ui_overlay.h browse_shim.h
+               net_info.h ui_overlay.h browse_shim.h \
+               net_zone.h net_paint.h net_ui.h
 
 fbshim.so: $(FBSHIM_OBJS) rbp_key.o fader_state.o rbp_transport.o pitch_state.o \
            keylog.o keylog_state.o compat_glibc.o $(FBSHIM_HDRS) rbp_transport.h pitch_state.h \
@@ -450,7 +452,7 @@ menu_paint.o: menu_paint.c menu_paint.h menu_zone.h menu_font.h gear_icon.h
 menu_draw.o: menu_draw.c menu_draw.h menu_paint.h menu_zone.h fbdev.h \
              point_xform.h pointsrc.h drmband.h \
              side_zone.h side_paint.h rbp_vu.h pitch_state.h \
-             fx_zone.h fx_paint.h fxpad_zone.h fxpad_paint.h
+             fx_zone.h fx_paint.h fxpad_zone.h fxpad_paint.h net_ui.h
 # side_zone.o and side_paint.o are pure, and their headers carry the whole
 # interface: side_zone.h for the geometry and the gesture, side_paint.h for the
 # view it draws over. side_paint.o takes side_zone.h as well because every
@@ -511,6 +513,9 @@ fxpad_paint.o: fxpad_paint.c fxpad_paint.h fxpad_zone.h menu_paint.h menu_zone.h
 # raw ioctls through syscalls.h's real_* wrappers -- the shim interposes open and
 # ioctl, so the raw path is not optional.
 drmband.o: drmband.c drmband.h syscalls.h pointsrc.h
+net_zone.o: net_zone.c net_zone.h menu_zone.h
+net_paint.o: net_paint.c net_paint.h net_zone.h menu_paint.h menu_font.h
+net_ui.o: net_ui.c net_ui.h net_paint.h net_zone.h pointsrc.h rbp_key.h rbp_abi.h
 
 # The one rule for the objects above. -Wall -Wextra is on, so a genuinely
 # unused helper fails the build rather than lingering.
