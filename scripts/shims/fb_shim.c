@@ -56,6 +56,7 @@
 #include "syscalls.h"
 #include "envutil.h"
 #include "pointsrc.h"          /* pointsrc_log, for the vsync counter below */
+#include "browse_shim.h"
 
 #include <stdarg.h>
 #include <errno.h>
@@ -437,6 +438,7 @@ int ioctl(int fd, unsigned long request, ...)
             menu_frame_tick();
         }
         vsync_rate_tick();
+        browse_shim_tick();
         /* THE VIDEO MASK, AND IT BELONGS HERE RATHER THAN IN menu_frame_tick(), which is the
          * mistake this line fixes. That function runs from TWO threads, and the second is a
          * builder loop whose period is POINT_MENU_MS -- shipped at 0.1 ms, i.e. ~8,900 calls a

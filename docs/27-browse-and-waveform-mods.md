@@ -101,3 +101,4 @@ Pioneer secara default sering kali menampilkan format Musical Key klasik (`Am`, 
    - Override Camelot Key display.
 4. Cross-compile di target board S905X dan deploy ke `/opt/rblive4/fbshim.so` dan chroot `/opt/rblive4/rbx3-run/usr/lib/fbshim.so`.
 5. Verifikasi fungsionalitas langsung di layar VNC (`http://unx.local:5800/`).
+
