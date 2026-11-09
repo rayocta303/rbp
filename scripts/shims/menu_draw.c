@@ -2639,11 +2639,12 @@ void menu_present_frame(void *real_fb, const void *shadow_fb, int w, int h, int 
         rects[num_rects++] = (struct clip_rect){ 0, 0, w, 56 };
     }
 
-    /* 5. Network Settings Overlay & Top Bar Strip Pill:
+    /* 5. Network Settings Overlay:
      * ONLY active on the Performance Screen (waveform view)!
-     * On Browse, Source, Utility, etc. do NOT clip so rbp's native UI is never overwritten. */
+     * On Browse, Source, Utility, etc. do NOT clip so rbp's native UI is never overwritten.
+     * Note: We do NOT clip the top-bar button ({936, 6, 1068, 44}) because shadow_fb
+     * provides the clean native top-bar background for net_strip_paint to draw over. */
     if (rbp_perf_screen()) {
-        rects[num_rects++] = (struct clip_rect){ 936, 6, 1068, 44 };
         if (net_ui_is_open()) {
             rects[num_rects++] = (struct clip_rect){ 0, 50, w, 580 };
         }

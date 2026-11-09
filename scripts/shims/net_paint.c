@@ -7,7 +7,7 @@
  * - Clean 1px dividers (#212021) matching RBP Utility tables
  * - Exact key-value columns with zero text collision/overlap
  * - Rectangular / square button UI without rounded corner borders (r=0)
- * - Top-bar button styled seamlessly with vertical dividers at x: 938..1066
+ * - Top-bar button at x: 939..1066 (KONSEP MOD RBP VIEW UTAMA), seamless flat style, NO blue background
  * - Overlay height strictly above the blue deckstrip line (y <= 580)
  */
 
@@ -68,6 +68,28 @@ static void np_set(const struct menu_view *v, int fx, int fy, unsigned int pv)
         *(unsigned int *)(row + (size_t)fx * 4) = pv;
     else
         *(unsigned short *)(row + (size_t)fx * 2) = (unsigned short)pv;
+}
+
+static void np_blend_pixel(const struct menu_view *v, int fx, int fy, unsigned int fg, int alpha)
+{
+    if (fx < 0 || fy < 0 || fx >= v->dw || fy >= v->dh || alpha <= 0)
+        return;
+    unsigned char *row = (unsigned char *)v->pix + (size_t)fy * v->pitch * (v->bpp / 8);
+    if (v->bpp == 32) {
+        unsigned int *p = (unsigned int *)(row + (size_t)fx * 4);
+        if (alpha >= 255) {
+            *p = fg;
+            return;
+        }
+        unsigned int bg = *p;
+        int inv = 255 - alpha;
+        int r = (((fg >> 16) & 0xff) * alpha + ((bg >> 16) & 0xff) * inv) / 255;
+        int g = (((fg >> 8) & 0xff) * alpha + ((bg >> 8) & 0xff) * inv) / 255;
+        int b = ((fg & 0xff) * alpha + (bg & 0xff) * inv) / 255;
+        *p = (0xffu << 24) | ((unsigned int)r << 16) | ((unsigned int)g << 8) | (unsigned int)b;
+    } else {
+        np_set(v, fx, fy, fg);
+    }
 }
 
 static void np_fill(const struct menu_view *v, int x0, int y0, int x1, int y1,
@@ -137,33 +159,73 @@ static const unsigned int s_wifi_icon_24[24] = {
     0x00000000
 };
 
-/* 20x24 Bluetooth Icon */
-static const unsigned int s_bt_icon_24[24] = {
-    0x00000000,
-    0x00060000, /* ......**............ */
-    0x00070000, /* ......***........... */
-    0x00078000, /* ......****.......... */
-    0x0007c000, /* ......*****......... */
-    0x0006e000, /* ......**..***....... */
-    0x00067000, /* ......**....***..... */
-    0x00663800, /* ..**..**......**.... */
-    0x00761c00, /* .***..**.......**... */
-    0x003e3c00, /* ..******......***... */
-    0x001ef800, /* ...****......***.... */
-    0x000fe000, /* ....**......***..... */
-    0x0007e000, /* ......******........ */
-    0x000fe000, /* ....**......***..... */
-    0x001ef800, /* ...****......***.... */
-    0x003e3c00, /* ..******......***... */
-    0x00761c00, /* .***..**.......**... */
-    0x00663800, /* ..**..**......**.... */
-    0x00067000, /* ......**....***..... */
-    0x0006e000, /* ......**..***....... */
-    0x0007c000, /* ......*****......... */
-    0x00078000, /* ......****.......... */
-    0x00070000, /* ......***........... */
-    0x00060000  /* ......**............ */
+/* High-resolution smooth 28x22 WiFi icon alpha mask (0..255) from native concept */
+static const unsigned char s_wifi_alpha[22][28] = {
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  12,  21,  26,  28,  24,  16,   2,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0 },
+    {   0,   0,   0,   0,   0,   0,   0,   6,  21,  54,  93, 125, 144, 153, 156, 148, 131, 106,  69,  31,   8,   0,   0,   0,   0,   0,   0,   0 },
+    {   0,   0,   0,   0,   0,   8,  38,  92, 145, 173, 183, 189, 191, 191, 191, 191, 189, 187, 177, 153, 112,  63,  22,   2,   0,   0,   0,   0 },
+    {   0,   0,   0,   2,  34,  88, 144, 177, 189, 189, 183, 173, 161, 155, 153, 158, 171, 179, 187, 189, 185, 163, 116,  56,  14,   0,   0,   0 },
+    {   2,   0,   4,  42, 124, 179, 189, 185, 177, 159, 133, 106,  78,  63,  59,  73,  99, 122, 149, 171, 185, 187, 187, 151,  86,  26,   0,   0 },
+    {   0,  12,  64, 134, 182, 187, 179, 151, 108,  68,  36,  16,   8,   6,   4,   7,  12,  25,  53,  93, 133, 165, 185, 185, 169, 115,  42,   6 },
+    {  26,  83, 153, 183, 185, 169, 123,  60,  18,  10,  20,  36,  54,  64,  66,  55,  40,  24,  12,  13,  39,  86, 144, 179, 185, 179, 135,  58 },
+    { 115, 159, 185, 189, 166,  88,  28,   6,  22,  68, 113, 143, 157, 159, 161, 157, 147, 128,  85,  32,   4,  11,  49, 127, 177, 187, 181, 144 },
+    { 105, 162, 191, 165,  78,  14,   2,  47, 113, 157, 177, 187, 189, 189, 189, 189, 187, 183, 163, 125,  68,  19,   2,  43, 109, 175, 187, 149 },
+    {  18,  78, 136,  68,   0,  12,  81, 149, 177, 189, 191, 185, 167, 157, 154, 164, 181, 193, 191, 179, 165, 121,  41,   3,  10,  80, 142,  56 },
+    {   0,   6,  22,   2,  18, 109, 175, 185, 186, 175, 141,  87,  48,  34,  32,  44,  79, 123, 165, 185, 187, 183, 145,  54,   2,   6,  24,   4 },
+    {   0,   0,   0,   6, 115, 195, 185, 185, 163,  95,  18,   0,   0,   0,   0,   0,   0,   0,  60, 145, 183, 185, 195, 159,  54,   0,   0,   0 },
+    {   0,   0,   0,   8,  96, 173, 181, 147,  71,  13,   6,  26,  51,  68,  70,  52,  26,  12,   6,  47, 121, 169, 181, 138,  44,   0,   2,   0 },
+    {   0,   0,   0,   0,  10,  82, 123,  55,   4,  27,  82, 140, 169, 177, 177, 171, 144,  98,  42,   8,  20,  84, 117,  43,   0,   0,   0,   0 },
+    {   0,   0,   0,   0,   0,   6,  22,  12,  50, 121, 167, 187, 189, 187, 187, 187, 189, 177, 137,  65,   8,  11,  22,   4,   0,   0,   0,   0 },
+    {   0,   0,   0,   0,   0,   0,   0,  16,  97, 175, 189, 181, 157, 138, 137, 155, 179, 187, 181, 117,  24,   0,   0,   0,   0,   0,   0,   0 },
+    {   0,   0,   0,   0,   0,   0,   0,   7,  53, 127, 158, 121,  62,  36,  36,  58, 113, 157, 145,  72,  12,   0,   0,   0,   0,   0,   0,   0 },
+    {   0,   0,   0,   0,   0,   0,   0,   0,   4,  42,  68,  32,  24,  47,  52,  22,  24,  66,  62,  14,   0,   0,   0,   0,   0,   0,   0,   0 },
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   4,   6,  14,  95, 153, 159, 104,  14,   4,   8,   0,   0,   0,   0,   0,   0,   0,   0,   0 },
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   2,   0,  34, 145, 187, 189, 161,  36,   0,   2,   0,   0,   0,   0,   0,   0,   0,   0,   0 },
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   2,   0,  22, 123, 185, 189, 136,  22,   0,   2,   0,   0,   0,   0,   0,   0,   0,   0,   0 },
+    {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  35,  82,  87,  36,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0 },
 };
+
+/* High-resolution smooth 16x24 Bluetooth icon alpha mask (0..255) from native concept */
+static const unsigned char s_bt_alpha[24][16] = {
+    {   0,   0,   0,   0,   0,  20,  47,   0,   0,   2,   0,   0,   0,   0,   0,   0 },
+    {   0,   0,   0,   0,   0,  32, 155,  99,   0,   0,   4,   0,   0,   0,   0,   0 },
+    {   0,   0,   0,   0,   0,  29, 165, 193, 125,  18,   0,   2,   0,   0,   0,   0 },
+    {   0,   0,   0,   0,   0,  29, 161, 187, 191, 155,  38,   0,   0,   0,   0,   0 },
+    {   0,  63,  84,   0,   0,  31, 163, 185, 187, 193, 167,  73,   0,   0,   2,   0 },
+    {  48, 183, 179,  86,   0,  28, 163, 189, 159, 171, 197, 181,  93,   8,   0,   0 },
+    {  48, 159, 192, 183,  87,  28, 159, 199,  94,  52, 169, 187, 191, 124,  32,   0 },
+    {   0,  38, 158, 192, 179, 113, 163, 196, 101,   0,  65, 179, 183, 197, 143,  16 },
+    {   2,   0,  33, 145, 193, 181, 181, 197,  89,  10, 140, 183, 189, 175,  73,   4 },
+    {   0,   1,   0,  17, 135, 193, 185, 187, 147, 154, 195, 191, 169,  49,   0,   0 },
+    {   0,   0,   2,   0,  12, 126, 187, 185, 187, 189, 192, 159,  42,   0,   0,   0 },
+    {   0,   0,   0,   2,   0,  37, 169, 187, 183, 191, 143,  42,   0,   0,   0,   0 },
+    {   0,   0,   0,   0,   0,  27, 163, 187, 181, 195, 105,   0,   0,   0,   0,   0 },
+    {   0,   0,   0,   1,   0,  93, 183, 185, 185, 185, 181, 101,   0,   0,   0,   0 },
+    {   0,   0,   0,   0,  99, 185, 185, 183, 183, 189, 189, 187, 108,   0,   0,   0 },
+    {   0,   0,   8, 109, 189, 187, 183, 193, 107, 104, 193, 185, 189, 114,   8,   0 },
+    {   0,  14, 127, 189, 185, 135, 169, 195,  96,   0,  93, 183, 185, 191, 125,  12 },
+    {  18, 122, 191, 190, 118,  42, 159, 198,  94,   0,  86, 177, 185, 187, 113,  13 },
+    {  65, 197, 189, 120,   8,  30, 167, 193, 116,  93, 186, 192, 175,  79,   8,   0 },
+    {  12, 103, 109,   8,   0,  37, 167, 187, 177, 187, 193, 156,  52,   0,   0,   0 },
+    {   0,   3,   7,   0,   0,  36, 167, 185, 187, 193, 132,  32,   0,   0,   2,   0 },
+    {   0,   0,   0,   0,   0,  38, 167, 191, 185, 100,   6,   0,   0,   0,   0,   0 },
+    {   0,   0,   0,   0,   0,  40, 174, 171,  66,   0,   0,   0,   0,   0,   0,   0 },
+    {   0,   0,   0,   0,   0,  42, 130,  43,   0,   4,   0,   0,   0,   0,   0,   0 },
+};
+
+static void np_draw_icon_aa(const struct menu_view *v, int x, int y,
+                            int w, int h, const unsigned char *alpha_table,
+                            unsigned int color)
+{
+    for (int r = 0; r < h; r++) {
+        for (int c = 0; c < w; c++) {
+            unsigned char a = alpha_table[r * w + c];
+            if (a > 6) {
+                np_blend_pixel(v, x + c, y + r, color, (int)a);
+            }
+        }
+    }
+}
 
 static void np_draw_icon(const struct menu_view *v, int x, int y,
                          const unsigned int *bmp, int h, unsigned int color)
@@ -304,32 +366,41 @@ void net_strip_paint(const struct menu_view *v,
     if (!v || !v->pix) return;
 
     /*
-     * Exactly matches KONSEP MOD RBP VIEW UTAMA + TOMBOL WIFI & BT.png:
-     * - Placed at x: 938..1066, y: 8..44
-     * - Seamless background with the top bar (highlighted when pressed)
-     * - Left vertical divider line (|) at x=938
-     * - Right vertical divider line (|) at x=1066
-     * - Wi-Fi Icon at x=972, BT Icon at x=1024
-     * - Strictly NO rounded pill box, NO top/bottom border
+     * Seamless with native Pioneer RBP top bar:
+     * - Placed at x: 939..1066, y: 8..44 (left of 00:00:00 INFO)
+     * - STRICTLY NO blue background fill (neither when active nor when clicked)
+     * - Transparent/untouched top bar background (icons blend via alpha)
+     * - Thin vertical dividers (|) at x=939 and x=1066 matching native RBP styling
+     * - High-resolution anti-aliased WiFi (28x22) and Bluetooth (16x24) glyphs
      */
+
+    /* Left vertical divider line (|) at x=939 */
+    np_fill(v, NET_STRIP_X0, NET_STRIP_Y0 + 4, NET_STRIP_X0, NET_STRIP_Y1 - 8, COL_BORDER_BRT);
+
+    /* Right vertical divider line (|) at x=1066 */
+    np_fill(v, NET_STRIP_X1, NET_STRIP_Y0 + 4, NET_STRIP_X1, NET_STRIP_Y1 - 8, COL_BORDER_BRT);
+
+    /* Icon colors:
+     *   active   -> bright crisp white (0xffffff)
+     *   inactive -> subtle dim gray (matching native Pioneer inactive text)
+     *   pressed  -> brief touch feedback (electric blue) WITHOUT ANY BACKGROUND BOX!
+     */
+    unsigned int wifi_col, bt_col;
     if (pressed) {
-        np_fill(v, NET_STRIP_X0, NET_STRIP_Y0, NET_STRIP_X1, NET_STRIP_Y1, COL_BLUE_DARK);
+        wifi_col = COL_ACCENT_HOV;
+        bt_col   = COL_ACCENT_HOV;
+    } else {
+        wifi_col = wifi_active ? COL_TEXT_WHITE : np_color(v->bpp, 140, 145, 155);
+        bt_col   = bt_active   ? COL_TEXT_WHITE : np_color(v->bpp, 140, 145, 155);
     }
 
-    /* Left vertical divider line (|) */
-    np_fill(v, NET_STRIP_X0, NET_STRIP_Y0 + 4, NET_STRIP_X0, NET_STRIP_Y1 - 4, COL_BORDER_BRT);
+    /* Draw smooth anti-aliased WiFi icon */
+    np_draw_icon_aa(v, NET_ICON_WIFI_X, NET_ICON_WIFI_Y, 28, 22,
+                    (const unsigned char *)s_wifi_alpha, wifi_col);
 
-    /* Right vertical divider line (|) */
-    np_fill(v, NET_STRIP_X1, NET_STRIP_Y0 + 4, NET_STRIP_X1, NET_STRIP_Y1 - 4, COL_BORDER_BRT);
-
-    unsigned int wifi_col = wifi_active ? COL_TEXT_WHITE : COL_TEXT_DIM;
-    unsigned int bt_col   = bt_active   ? COL_TEXT_WHITE : COL_TEXT_DIM;
-
-    /* Draw Wi-Fi Icon */
-    np_draw_icon(v, NET_ICON_WIFI_X, NET_ICON_WIFI_Y, s_wifi_icon_24, 24, wifi_col);
-
-    /* Draw Bluetooth Icon */
-    np_draw_icon(v, NET_ICON_BT_X, NET_ICON_BT_Y, s_bt_icon_24, 24, bt_col);
+    /* Draw smooth anti-aliased Bluetooth icon */
+    np_draw_icon_aa(v, NET_ICON_BT_X, NET_ICON_BT_Y, 16, 24,
+                    (const unsigned char *)s_bt_alpha, bt_col);
 }
 
 /* --- Overlay Page Paint --- */
@@ -370,12 +441,12 @@ void net_overlay_paint(const struct menu_view *v,
     np_text_center(v, NET_CLOSE_X0, NET_CLOSE_Y0, NET_CLOSE_X1, NET_CLOSE_Y1,
                    "CLOSE", close_fill, COL_TEXT_WHITE);
 
-    /* 3. Tab Bar (y: 96..134) - 4 sharp rectangular tabs across x: 40..1240 */
+    /* 3. Tab Bar (y: 96..134) - 5 sharp rectangular tabs across x: 40..1240 */
     const char *tab_names[NET_TABS_COUNT] = {
-        "WI-FI", "BLUETOOTH", "HOTSPOT / AP", "STATUS / IP"
+        "WI-FI", "BLUETOOTH", "HOTSPOT / AP", "MOD MENU", "STATUS / IP"
     };
-    int tab_x0[NET_TABS_COUNT] = { NET_TAB0_X0, NET_TAB1_X0, NET_TAB2_X0, NET_TAB3_X0 };
-    int tab_x1[NET_TABS_COUNT] = { NET_TAB0_X1, NET_TAB1_X1, NET_TAB2_X1, NET_TAB3_X1 };
+    int tab_x0[NET_TABS_COUNT] = { NET_TAB0_X0, NET_TAB1_X0, NET_TAB2_X0, NET_TAB3_X0, NET_TAB4_X0 };
+    int tab_x1[NET_TABS_COUNT] = { NET_TAB0_X1, NET_TAB1_X1, NET_TAB2_X1, NET_TAB3_X1, NET_TAB4_X1 };
 
     for (int i = 0; i < NET_TABS_COUNT; i++) {
         int is_act = (active_tab == i);
@@ -606,6 +677,35 @@ void net_overlay_paint(const struct menu_view *v,
         char cli_buf[64];
         snprintf(cli_buf, sizeof(cli_buf), "%d devices - Rekordbox / iPad", st->ap_clients);
         np_draw_table_row(v, 7, "CONNECTED CLIENTS", cli_buf, COL_TEXT_CYAN);
+
+    } else if (active_tab == NET_TAB_MODS) {
+        /* --- MOD MENU TAB --- */
+        /* Header Card */
+        np_rect(v, NET_BODY_X0, NET_CTRL_Y0, NET_BODY_X1, NET_CTRL_Y1, COL_CARD_BG, COL_BORDER);
+        int line_c = NET_CTRL_Y0 + ((NET_CTRL_Y1 - NET_CTRL_Y0) - MENU_FONT_LINE) / 2;
+        np_text(v, NET_BODY_X0 + 20, line_c, "RX3 Mod Control",
+                COL_CARD_BG, COL_TEXT_WHITE, NET_BODY_X0 + 20, 580);
+        np_text(v, 600, line_c, "Requires Restart to apply",
+                COL_CARD_BG, COL_TEXT_GRAY, 600, NET_BODY_X1 - 20);
+
+        /* Static mod list display — editable via mods.conf on target */
+        np_draw_table_row(v, 0, "core",                "Enabled - librx3_core.so",       COL_TEXT_GREEN);
+        np_draw_table_row(v, 1, "stems",               "Enabled - stemwave",              COL_TEXT_GREEN);
+        np_draw_table_row(v, 2, "theme-white",         "Enabled - bright theme",          COL_TEXT_GREEN);
+        np_draw_table_row(v, 3, "keyshift / key-match","Enabled",                         COL_TEXT_GREEN);
+        np_draw_table_row(v, 4, "browse-columns",      "Enabled",                         COL_TEXT_GREEN);
+        np_draw_table_row(v, 5, "beatjump-custom",     "Enabled",                         COL_TEXT_GREEN);
+        np_draw_table_row(v, 6, "colorfx-dual",        "Enabled",                         COL_TEXT_GREEN);
+        np_draw_table_row(v, 7, "now-playing + search","Enabled",                         COL_TEXT_GREEN);
+
+        /* Apply / Restart button */
+        int act_prs = (pressed_target == 7);
+        unsigned int act_fill = act_prs ? COL_ACCENT_HOV : COL_ROW_BG;
+        np_rect(v, NET_MOD_APPLY_X0, NET_MOD_APPLY_Y0,
+                NET_MOD_APPLY_X1, NET_MOD_APPLY_Y1, act_fill, COL_BORDER_BRT);
+        np_text_center(v, NET_MOD_APPLY_X0, NET_MOD_APPLY_Y0,
+                       NET_MOD_APPLY_X1, NET_MOD_APPLY_Y1,
+                       "RESTART RBP", act_fill, COL_TEXT_WHITE);
 
     } else if (active_tab == NET_TAB_STATUS) {
         /* --- STATUS / IP TAB --- */

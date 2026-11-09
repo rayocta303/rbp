@@ -235,15 +235,23 @@ static void check_debug_key_cmd(void)
             s_dirty = 1;
         } else if (strcmp(cmd, "tab0") == 0) {
             net_set_tab(NET_TAB_WIFI);
+            net_open();
             s_dirty = 1;
         } else if (strcmp(cmd, "tab1") == 0) {
             net_set_tab(NET_TAB_BT);
+            net_open();
             s_dirty = 1;
         } else if (strcmp(cmd, "tab2") == 0) {
             net_set_tab(NET_TAB_HOTSPOT);
+            net_open();
             s_dirty = 1;
         } else if (strcmp(cmd, "tab3") == 0) {
+            net_set_tab(NET_TAB_MODS);
+            net_open();
+            s_dirty = 1;
+        } else if (strcmp(cmd, "tab4") == 0) {
             net_set_tab(NET_TAB_STATUS);
+            net_open();
             s_dirty = 1;
         } else if (strncmp(cmd, "raw ", 4) == 0) {
             int code = (int)strtol(cmd + 4, NULL, 0);
