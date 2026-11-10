@@ -33,9 +33,9 @@
 
 /* Wi-Fi & BT Icon Locations inside Strip */
 #define NET_ICON_WIFI_X    966
-#define NET_ICON_WIFI_Y     13
+#define NET_ICON_WIFI_Y     14
 #define NET_ICON_BT_X     1022
-#define NET_ICON_BT_Y       12
+#define NET_ICON_BT_Y       13
 
 /* --- Main Overlay Window Geometry --- */
 #define NET_WIN_X0           0
@@ -128,6 +128,22 @@ enum {
     NET_TAB_HOTSPOT,
     NET_TAB_MODS,
     NET_TAB_STATUS
+};
+
+/* Pressed Targets */
+enum {
+    TARGET_NONE = 0,
+    TARGET_STRIP,
+    TARGET_CLOSE,
+    TARGET_TAB0,
+    TARGET_TAB1,
+    TARGET_TAB2,
+    TARGET_TAB3,
+    TARGET_TAB4,
+    TARGET_TOGGLE,
+    TARGET_ACTION,
+    TARGET_ROW_CONNECT,
+    TARGET_MOD_APPLY
 };
 
 /* Actions emitted by touch release */

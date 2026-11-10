@@ -138,6 +138,7 @@
 #include "syscalls.h"
 #include "envutil.h"
 #include "rbp_key.h"
+#include "net_ui.h"
 #include "rbp_abi.h"
 #include "ui_overlay.h"
 #include "net_ui.h"
@@ -2648,6 +2649,13 @@ void menu_present_frame(void *real_fb, const void *shadow_fb, int w, int h, int 
         if (net_ui_is_open()) {
             rects[num_rects++] = (struct clip_rect){ 0, 50, w, 580 };
         }
+    }
+
+    /* Paint the top-bar Wi-Fi & BT strip into shadow_fb before copying to real_fb.
+     * This guarantees single-pass atomic blit without any 60Hz flickering.
+     * Strictly gated on performance screen and top menu band closed. */
+    if (rbp_perf_screen() && !menu_is_open()) {
+        net_ui_paint_strip((void *)shadow_fb, w, h, pitch_px, bpp);
     }
 
     static int s_was_any_open = 0;

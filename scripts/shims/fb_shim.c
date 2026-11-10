@@ -436,6 +436,9 @@ int ioctl(int fd, unsigned long request, ...)
             menu_present_frame(g_real_fb, g_shadow_fb, 1280, 800, 1280, fb_lie_bpp());
         } else {
             menu_frame_tick();
+            if (g_real_fb && g_fb_len > 0) {
+                net_ui_paint_strip(g_real_fb, 1280, 800, 1280, fb_lie_bpp());
+            }
         }
         if (g_real_fb && g_fb_len > 0) {
             net_ui_present(g_real_fb, 1280, 800, 1280, fb_lie_bpp());
@@ -457,6 +460,9 @@ int ioctl(int fd, unsigned long request, ...)
             menu_present_frame(g_real_fb, g_shadow_fb, 1280, 800, 1280, fb_lie_bpp());
         } else {
             menu_frame_tick();
+            if (g_real_fb && g_fb_len > 0) {
+                net_ui_paint_strip(g_real_fb, 1280, 800, 1280, fb_lie_bpp());
+            }
         }
         if (g_real_fb && g_fb_len > 0) {
             net_ui_present(g_real_fb, 1280, 800, 1280, fb_lie_bpp());

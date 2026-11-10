@@ -67,8 +67,40 @@ static void *theme_watch(void *unused)
                 log_line("theme: rx3-theme.off seen, global remap stopped");
             }
         }
+        {
+            int tfd = open("/tmp/rx3-theme.toggle", O_RDONLY);
+            if (tfd >= 0) {
+                close(tfd);
+                unlink("/tmp/rx3-theme.toggle");
+                __sync_bool_compare_and_swap(&theme_toggle_pending, 0, 1);
+                log_line("theme: rx3-theme.toggle triggered");
+            }
+        }
+        {
+            static int s_last_light = -1;
+            int cur_light = (framework && framework->images) ? framework->images->light_active() : 0;
+            if (cur_light != s_last_light) {
+                s_last_light = cur_light;
+                int sf = open("/tmp/rx3-theme.state", O_WRONLY | O_CREAT | O_TRUNC, 0666);
+                if (sf >= 0) {
+                    char ch = cur_light ? '1' : '0';
+                    write(sf, &ch, 1);
+                    close(sf);
+                }
+            }
+        }
     }
     return 0;
+}
+
+int rx3_theme_is_light(void)
+{
+    return framework && framework->images ? framework->images->light_active() : 0;
+}
+
+void rx3_theme_toggle(void)
+{
+    __sync_bool_compare_and_swap(&theme_toggle_pending, 0, 1);
 }
 
 static int theme_configured(void)

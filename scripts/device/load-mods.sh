@@ -35,13 +35,33 @@ if [ "$MOD_CORE" = "1" ] && [ -f "$CORE_FILE" ]; then
             ;;
     esac
 
-    # Panel asset tab slots
+    # Panel asset tab slots (11 slots: 00..10 for KEY, STEMS, SAMPLES, STATUS)
     add_env "RX3_TAB_DARK_00" "/root/pdj/rx3-key-selected.rgb565"
     add_env "RX3_TAB_LIGHT_00" "/root/pdj/rx3-key-selected-light.rgb565"
     add_env "RX3_TAB_DARK_01" "/root/pdj/rx3-stems-selected.rgb565"
     add_env "RX3_TAB_LIGHT_01" "/root/pdj/rx3-stems-selected-light.rgb565"
     add_env "RX3_TAB_DARK_02" "/root/pdj/rx3-status-none-selected.rgb565"
     add_env "RX3_TAB_LIGHT_02" "/root/pdj/rx3-status-none-selected-light.rgb565"
+    add_env "RX3_TAB_DARK_03" "/root/pdj/rx3-none-selected.rgb565"
+    add_env "RX3_TAB_LIGHT_03" "/root/pdj/rx3-none-selected-light.rgb565"
+    add_env "RX3_TAB_DARK_04" "/root/pdj/rx3-samples-selected.rgb565"
+    add_env "RX3_TAB_LIGHT_04" "/root/pdj/rx3-samples-selected-light.rgb565"
+    add_env "RX3_TAB_DARK_05" "/root/pdj/rx3-samples-none-selected.rgb565"
+    add_env "RX3_TAB_LIGHT_05" "/root/pdj/rx3-samples-none-selected-light.rgb565"
+    add_env "RX3_TAB_DARK_06" "/root/pdj/rx3-samples-beatfx-selected.rgb565"
+    add_env "RX3_TAB_LIGHT_06" "/root/pdj/rx3-samples-beatfx-selected-light.rgb565"
+    add_env "RX3_TAB_DARK_07" "/root/pdj/rx3-single-key-none.rgb565"
+    add_env "RX3_TAB_LIGHT_07" "/root/pdj/rx3-single-key-none-light.rgb565"
+    add_env "RX3_TAB_DARK_08" "/root/pdj/rx3-single-key-selected.rgb565"
+    add_env "RX3_TAB_LIGHT_08" "/root/pdj/rx3-single-key-selected-light.rgb565"
+    add_env "RX3_TAB_DARK_09" "/root/pdj/rx3-single-stems-none.rgb565"
+    add_env "RX3_TAB_LIGHT_09" "/root/pdj/rx3-single-stems-none-light.rgb565"
+    add_env "RX3_TAB_DARK_10" "/root/pdj/rx3-single-stems-selected.rgb565"
+    add_env "RX3_TAB_LIGHT_10" "/root/pdj/rx3-single-stems-selected-light.rgb565"
+
+    # Pad Glyph Atlases
+    add_env "RX3_PAD_ATLAS" "/root/pdj/rx3-glyph-atlas-dark.rgb565"
+    add_env "RX3_PAD_ATLAS_LIGHT" "/root/pdj/rx3-glyph-atlas-light.rgb565"
 
     # Harmonic Mixing
     [ "${MOD_KEYSHIFT:-1}" = "1" ] && add_env "RX3_KEYSHIFT" "1"
@@ -66,6 +86,10 @@ if [ "$MOD_CORE" = "1" ] && [ -f "$CORE_FILE" ]; then
     [ "${MOD_STEMS:-1}" = "1" ] && {
         mkdir -p /tmp/rx3-stems 2>/dev/null
         add_env "RX3_STEMS_DIR" "/tmp/rx3-stems"
+    }
+    [ "${MOD_STEMS_LOCAL:-1}" = "1" ] && {
+        mkdir -p /tmp/stems-local 2>/dev/null
+        add_env "RX3_STEMS_LOCAL" "1"
     }
 
     # RMX-1000 Roll & Scene

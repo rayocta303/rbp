@@ -12,6 +12,7 @@
  */
 
 #include "net_paint.h"
+#include "net_zone.h"
 #include "menu_font.h"
 #include "menu_paint.h"
 
@@ -70,6 +71,33 @@ static void np_set(const struct menu_view *v, int fx, int fy, unsigned int pv)
         *(unsigned short *)(row + (size_t)fx * 2) = (unsigned short)pv;
 }
 
+static unsigned int np_blend(int bpp, unsigned int base, unsigned int ink, int cov)
+{
+    int br, bg, bb, ir, ig, ib;
+    if (cov <= 0) return base;
+    if (cov >= 255) return ink;
+
+    if (bpp == 32) {
+        br = (int)((base >> 16) & 0xffu); bg = (int)((base >> 8) & 0xffu);
+        bb = (int)(base & 0xffu);
+        ir = (int)((ink >> 16) & 0xffu);  ig = (int)((ink >> 8) & 0xffu);
+        ib = (int)(ink & 0xffu);
+        return (0xffu << 24) |
+               (unsigned int)(((br * (255 - cov) + ir * cov + 127) / 255) << 16 |
+                              ((bg * (255 - cov) + ig * cov + 127) / 255) << 8 |
+                              ((bb * (255 - cov) + ib * cov + 127) / 255));
+    }
+    br = (int)((base >> 11) & 0x1fu) * 255 / 31;
+    bg = (int)((base >> 5) & 0x3fu) * 255 / 63;
+    bb = (int)(base & 0x1fu) * 255 / 31;
+    ir = (int)((ink >> 11) & 0x1fu) * 255 / 31;
+    ig = (int)((ink >> 5) & 0x3fu) * 255 / 63;
+    ib = (int)(ink & 0x1fu) * 255 / 31;
+    return (unsigned int)(((((br * (255 - cov) + ir * cov + 127) / 255) & 0xf8) << 8) |
+                          ((((bg * (255 - cov) + ig * cov + 127) / 255) & 0xfc) << 3) |
+                          ((((bb * (255 - cov) + ib * cov + 127) / 255) & 0xf8) >> 3));
+}
+
 static void np_blend_pixel(const struct menu_view *v, int fx, int fy, unsigned int fg, int alpha)
 {
     if (fx < 0 || fy < 0 || fx >= v->dw || fy >= v->dh || alpha <= 0)
@@ -81,14 +109,14 @@ static void np_blend_pixel(const struct menu_view *v, int fx, int fy, unsigned i
             *p = fg;
             return;
         }
-        unsigned int bg = *p;
-        int inv = 255 - alpha;
-        int r = (((fg >> 16) & 0xff) * alpha + ((bg >> 16) & 0xff) * inv) / 255;
-        int g = (((fg >> 8) & 0xff) * alpha + ((bg >> 8) & 0xff) * inv) / 255;
-        int b = ((fg & 0xff) * alpha + (bg & 0xff) * inv) / 255;
-        *p = (0xffu << 24) | ((unsigned int)r << 16) | ((unsigned int)g << 8) | (unsigned int)b;
+        *p = np_blend(32, *p, fg, alpha);
     } else {
-        np_set(v, fx, fy, fg);
+        unsigned short *p = (unsigned short *)(row + (size_t)fx * 2);
+        if (alpha >= 255) {
+            *p = (unsigned short)fg;
+            return;
+        }
+        *p = (unsigned short)np_blend(16, (unsigned int)*p, fg, alpha);
     }
 }
 
@@ -258,33 +286,6 @@ static void np_draw_signal_bars(const struct menu_view *v, int x, int y, int sig
 
 /* --- Font & Text Helpers --- */
 
-static unsigned int np_blend(int bpp, unsigned int base, unsigned int ink, int cov)
-{
-    int br, bg, bb, ir, ig, ib;
-    if (cov <= 0) return base;
-    if (cov >= 255) return ink;
-
-    if (bpp == 32) {
-        br = (int)((base >> 16) & 0xffu); bg = (int)((base >> 8) & 0xffu);
-        bb = (int)(base & 0xffu);
-        ir = (int)((ink >> 16) & 0xffu);  ig = (int)((ink >> 8) & 0xffu);
-        ib = (int)(ink & 0xffu);
-        return (0xffu << 24) |
-               (unsigned int)(((br * (255 - cov) + ir * cov + 127) / 255) << 16 |
-                              ((bg * (255 - cov) + ig * cov + 127) / 255) << 8 |
-                              ((bb * (255 - cov) + ib * cov + 127) / 255));
-    }
-    br = (int)((base >> 11) & 0x1fu) * 255 / 31;
-    bg = (int)((base >> 5) & 0x3fu) * 255 / 63;
-    bb = (int)(base & 0x1fu) * 255 / 31;
-    ir = (int)((ink >> 11) & 0x1fu) * 255 / 31;
-    ig = (int)((ink >> 5) & 0x3fu) * 255 / 63;
-    ib = (int)(ink & 0x1fu) * 255 / 31;
-    return (unsigned int)(((((br * (255 - cov) + ir * cov + 127) / 255) & 0xf8) << 8) |
-                          ((((bg * (255 - cov) + ig * cov + 127) / 255) & 0xfc) << 3) |
-                          ((((bb * (255 - cov) + ib * cov + 127) / 255) & 0xf8) >> 3));
-}
-
 static void np_glyph(const struct menu_view *v, int pen_x, int line_y,
                      unsigned char c, unsigned int base, unsigned int ink,
                      int cx0, int cx1)
@@ -434,7 +435,7 @@ void net_overlay_paint(const struct menu_view *v,
     np_text(v, 340, line_y, "XDJ-RX3 WIRELESS CONTROL", COL_HDR_BG, COL_TEXT_GRAY, 340, 1100);
 
     /* Close Button [CLOSE] - Sharp rectangle without rounded corners */
-    int close_pressed = (pressed_target == 2 /* TARGET_CLOSE */);
+    int close_pressed = (pressed_target == TARGET_CLOSE);
     unsigned int close_fill = close_pressed ? COL_CLOSE_RED : COL_CARD_BG;
     unsigned int close_bdr  = close_pressed ? COL_ACCENT_HOV : COL_BORDER;
     np_rect(v, NET_CLOSE_X0, NET_CLOSE_Y0, NET_CLOSE_X1, NET_CLOSE_Y1, close_fill, close_bdr);
@@ -450,7 +451,7 @@ void net_overlay_paint(const struct menu_view *v,
 
     for (int i = 0; i < NET_TABS_COUNT; i++) {
         int is_act = (active_tab == i);
-        int is_prs = (pressed_target == (3 + i) /* TARGET_TAB0..3 */);
+        int is_prs = (pressed_target == (TARGET_TAB0 + i));
         unsigned int tab_fill = is_act ? COL_ACCENT_BLUE : (is_prs ? COL_BLUE_DARK : COL_CARD_BG);
         unsigned int tab_bdr  = is_act ? COL_BLUE_BORDER : (is_prs ? COL_ACCENT_HOV : COL_BORDER);
         unsigned int tab_txt  = is_act ? COL_TEXT_WHITE  : (is_prs ? COL_TEXT_WHITE : COL_TEXT_GRAY);
@@ -472,7 +473,7 @@ void net_overlay_paint(const struct menu_view *v,
                 NET_BODY_X0 + 20, 225);
 
         /* Toggle Button [ON / OFF] - Sharp rectangle */
-        int tog_prs = (pressed_target == 7 /* TARGET_TOGGLE */);
+        int tog_prs = (pressed_target == TARGET_TOGGLE);
         unsigned int tog_fill = st->wifi_enabled ? COL_GREEN_ON : COL_GRAY_OFF;
         if (tog_prs) tog_fill = COL_ACCENT_HOV;
         np_rect(v, NET_TOGGLE_X0, NET_TOGGLE_Y0, NET_TOGGLE_X1, NET_TOGGLE_Y1, tog_fill, COL_BORDER_BRT);
@@ -480,7 +481,7 @@ void net_overlay_paint(const struct menu_view *v,
                        st->wifi_enabled ? "ON" : "OFF", tog_fill, COL_TEXT_WHITE);
 
         /* Scan Button [SCAN] - Sharp rectangle */
-        int act_prs = (pressed_target == 8 /* TARGET_ACTION */);
+        int act_prs = (pressed_target == TARGET_ACTION);
         unsigned int act_fill = act_prs ? COL_ACCENT_HOV : COL_ROW_BG;
         np_rect(v, NET_ACTION_X0, NET_ACTION_Y0, NET_ACTION_X1, NET_ACTION_Y1, act_fill, COL_BORDER_BRT);
         np_text_center(v, NET_ACTION_X0, NET_ACTION_Y0, NET_ACTION_X1, NET_ACTION_Y1,
@@ -558,7 +559,7 @@ void net_overlay_paint(const struct menu_view *v,
                         is_conn ? COL_TEXT_CYAN : COL_TEXT_GRAY, 835, 950);
 
                 /* Connect Button - Sharp rectangle */
-                int conn_prs = (pressed_target == 9 /* TARGET_ROW_CONNECT */ && pressed_val == i);
+                int conn_prs = (pressed_target == TARGET_ROW_CONNECT && pressed_val == i);
                 unsigned int cbtn_fill = is_conn ? COL_CARD_BG : (conn_prs ? COL_ACCENT_HOV : COL_ACCENT_BLUE);
                 unsigned int cbtn_bdr  = is_conn ? COL_ACCENT_BLUE : COL_BLUE_BORDER;
                 unsigned int cbtn_txt  = is_conn ? COL_TEXT_CYAN : COL_TEXT_WHITE;
@@ -598,7 +599,7 @@ void net_overlay_paint(const struct menu_view *v,
                 NET_BODY_X0 + 20, 225);
 
         /* Toggle Button */
-        int tog_prs = (pressed_target == 7);
+        int tog_prs = (pressed_target == TARGET_TOGGLE);
         unsigned int tog_fill = st->bt_enabled ? COL_GREEN_ON : COL_GRAY_OFF;
         if (tog_prs) tog_fill = COL_ACCENT_HOV;
         np_rect(v, NET_TOGGLE_X0, NET_TOGGLE_Y0, NET_TOGGLE_X1, NET_TOGGLE_Y1,
@@ -607,7 +608,7 @@ void net_overlay_paint(const struct menu_view *v,
                        st->bt_enabled ? "ON" : "OFF", tog_fill, COL_TEXT_WHITE);
 
         /* Scan Button */
-        int act_prs = (pressed_target == 8);
+        int act_prs = (pressed_target == TARGET_ACTION);
         unsigned int act_fill = act_prs ? COL_ACCENT_HOV : COL_ROW_BG;
         np_rect(v, NET_ACTION_X0, NET_ACTION_Y0, NET_ACTION_X1, NET_ACTION_Y1,
                 act_fill, COL_BORDER_BRT);
@@ -647,7 +648,7 @@ void net_overlay_paint(const struct menu_view *v,
                 NET_BODY_X0 + 20, 225);
 
         /* Toggle Button */
-        int tog_prs = (pressed_target == 7);
+        int tog_prs = (pressed_target == TARGET_TOGGLE);
         unsigned int tog_fill = st->ap_enabled ? COL_GREEN_ON : COL_GRAY_OFF;
         if (tog_prs) tog_fill = COL_ACCENT_HOV;
         np_rect(v, NET_TOGGLE_X0, NET_TOGGLE_Y0, NET_TOGGLE_X0 + 130, NET_TOGGLE_Y1,
@@ -699,7 +700,7 @@ void net_overlay_paint(const struct menu_view *v,
         np_draw_table_row(v, 7, "now-playing + search","Enabled",                         COL_TEXT_GREEN);
 
         /* Apply / Restart button */
-        int act_prs = (pressed_target == 7);
+        int act_prs = (pressed_target == TARGET_MOD_APPLY);
         unsigned int act_fill = act_prs ? COL_ACCENT_HOV : COL_ROW_BG;
         np_rect(v, NET_MOD_APPLY_X0, NET_MOD_APPLY_Y0,
                 NET_MOD_APPLY_X1, NET_MOD_APPLY_Y1, act_fill, COL_BORDER_BRT);
@@ -717,7 +718,7 @@ void net_overlay_paint(const struct menu_view *v,
                 NET_BODY_X0 + 20, 225);
 
         /* Restart Button */
-        int act_prs = (pressed_target == 7 || pressed_target == 8);
+        int act_prs = (pressed_target == TARGET_TOGGLE || pressed_target == TARGET_ACTION);
         unsigned int act_fill = act_prs ? COL_ACCENT_HOV : COL_ROW_BG;
         np_rect(v, NET_TOGGLE_X0, NET_TOGGLE_Y0, NET_TOGGLE_X0 + 190, NET_TOGGLE_Y1,
                 act_fill, COL_BORDER_BRT);

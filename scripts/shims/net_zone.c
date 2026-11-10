@@ -5,19 +5,6 @@
 #include "net_zone.h"
 #include <stddef.h>
 
-enum {
-    TARGET_NONE = 0,
-    TARGET_STRIP,
-    TARGET_CLOSE,
-    TARGET_TAB0,
-    TARGET_TAB1,
-    TARGET_TAB2,
-    TARGET_TAB3,
-    TARGET_TOGGLE,
-    TARGET_ACTION,
-    TARGET_ROW_CONNECT
-};
-
 static int s_open = 0;
 static int s_tab = NET_TAB_WIFI;
 static int s_pressed_target = TARGET_NONE;
@@ -149,6 +136,18 @@ int net_feed(int down, int x, int y, int *act, int *val)
             s_pressed_target = TARGET_TAB3;
             return MZ_FEED_TAKEN;
         }
+        if (in_rect(x, y, NET_TAB4_X0, NET_TAB_Y0, NET_TAB4_X1, NET_TAB_Y1)) {
+            s_pressed_target = TARGET_TAB4;
+            return MZ_FEED_TAKEN;
+        }
+
+        /* Mod Menu (Tab 3): Restart RBP / Apply button */
+        if (s_tab == NET_TAB_MODS) {
+            if (in_rect(x, y, NET_MOD_APPLY_X0, NET_MOD_APPLY_Y0, NET_MOD_APPLY_X1, NET_MOD_APPLY_Y1)) {
+                s_pressed_target = TARGET_MOD_APPLY;
+                return MZ_FEED_TAKEN;
+            }
+        }
 
         /* Main Toggle / Action Button in Control Bar */
         int tog_x1 = NET_TOGGLE_X1;
@@ -212,9 +211,20 @@ int net_feed(int down, int x, int y, int *act, int *val)
             return MZ_FEED_TAKEN;
         }
         if (prev == TARGET_TAB3 && in_rect(x, y, NET_TAB3_X0, NET_TAB_Y0, NET_TAB3_X1, NET_TAB_Y1)) {
+            s_tab = NET_TAB_MODS;
+            if (act) *act = NET_ACT_SET_TAB;
+            if (val) *val = NET_TAB_MODS;
+            return MZ_FEED_TAKEN;
+        }
+        if (prev == TARGET_TAB4 && in_rect(x, y, NET_TAB4_X0, NET_TAB_Y0, NET_TAB4_X1, NET_TAB_Y1)) {
             s_tab = NET_TAB_STATUS;
             if (act) *act = NET_ACT_SET_TAB;
             if (val) *val = NET_TAB_STATUS;
+            return MZ_FEED_TAKEN;
+        }
+
+        if (prev == TARGET_MOD_APPLY && in_rect(x, y, NET_MOD_APPLY_X0, NET_MOD_APPLY_Y0, NET_MOD_APPLY_X1, NET_MOD_APPLY_Y1)) {
+            if (act) *act = NET_ACT_MOD_RESTART;
             return MZ_FEED_TAKEN;
         }
 

@@ -9,6 +9,7 @@
 #include "net_ui.h"
 #include "net_paint.h"
 #include "net_zone.h"
+#include "menu_zone.h"
 #include "pointsrc.h"
 #include "rbp_key.h"
 #include "rbp_abi.h"
@@ -267,7 +268,7 @@ static void check_debug_key_cmd(void)
 
 int net_ui_is_open(void)
 {
-    if (!rbp_perf_screen()) {
+    if (!rbp_perf_screen() || menu_is_open()) {
         if (net_is_open()) {
             net_close();
             s_dirty = 1;
@@ -275,6 +276,33 @@ int net_ui_is_open(void)
         return 0;
     }
     return net_is_open();
+}
+
+void net_ui_paint_strip(void *fb, int w, int h, int pitch_px, int bpp)
+{
+    if (!fb || w <= 0 || h <= 0) return;
+    if (!s_inited) net_ui_init();
+
+    if (!rbp_perf_screen() || menu_is_open()) {
+        return;
+    }
+
+    net_state_refresh();
+
+    struct menu_view v;
+    v.dw = w;
+    v.dh = h;
+    v.bx = 0;
+    v.by = 0;
+    v.pitch = pitch_px;
+    v.bpp = bpp;
+    v.pix = fb;
+
+    int strip_pressed = (net_get_pressed() == TARGET_STRIP);
+    int wifi_active = (s_st.wifi_enabled && s_st.wifi_connected);
+    int bt_active = s_st.bt_enabled;
+
+    net_strip_paint(&v, wifi_active, bt_active, strip_pressed);
 }
 
 void net_ui_present(void *real_fb, int w, int h, int pitch_px, int bpp)
@@ -285,8 +313,8 @@ void net_ui_present(void *real_fb, int w, int h, int pitch_px, int bpp)
     check_debug_key_cmd();
 
     /* Strictly limit network buttons and overlay to the Performance screen (waveform view).
-     * On Browse, Source, Utility, etc., do NOT paint anything! */
-    if (!rbp_perf_screen()) {
+     * On Browse, Source, Utility, etc., or when the top menu band is open, do NOT paint anything! */
+    if (!rbp_perf_screen() || menu_is_open()) {
         if (net_is_open()) {
             net_close();
             s_dirty = 1;
@@ -301,22 +329,6 @@ void net_ui_present(void *real_fb, int w, int h, int pitch_px, int bpp)
         s_dirty = 1;
         s_last_open_state = open;
     }
-
-    struct menu_view v;
-    v.dw = w;
-    v.dh = h;
-    v.bx = 0;
-    v.by = 0;
-    v.pitch = pitch_px;
-    v.bpp = bpp;
-    v.pix = real_fb;
-
-    /* Always paint the top bar strip pill box */
-    int strip_pressed = (net_get_pressed() == 1 /* TARGET_STRIP */);
-    int wifi_active = (s_st.wifi_enabled && s_st.wifi_connected);
-    int bt_active = s_st.bt_enabled;
-
-    net_strip_paint(&v, wifi_active, bt_active, strip_pressed);
 
     /* If overlay is open, render into double buffer and blit cleanly */
     if (open) {
@@ -426,6 +438,10 @@ int net_ui_touch(int down, int x, int y)
         s_dirty = 1;
         pointsrc_log("net_ui: restart network requested");
         net_send_cmd("restart_net\n");
+    } else if (act == NET_ACT_MOD_RESTART) {
+        s_dirty = 1;
+        pointsrc_log("net_ui: restart rbp requested from mod menu");
+        system("systemctl restart rbp 2>/dev/null || /etc/init.d/rbp restart 2>/dev/null &");
     }
 
     if (s_pressed_val != val) {

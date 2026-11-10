@@ -9,8 +9,13 @@
 void net_ui_init(void);
 
 /*
+ * Render the top-bar Wi-Fi & Bluetooth strip into a buffer (e.g. shadow_fb).
+ * Only renders on performance screen when the top menu band is closed.
+ */
+void net_ui_paint_strip(void *fb, int w, int h, int pitch_px, int bpp);
+
+/*
  * Called every frame during vsync in fb_shim.c.
- * Always renders the top bar Wi-Fi & Bluetooth strip pill.
  * If overlay is open (net_is_open()), renders the network settings overlay.
  */
 void net_ui_present(void *real_fb, int w, int h, int pitch_px, int bpp);
