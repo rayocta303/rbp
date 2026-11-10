@@ -13,6 +13,7 @@
 #include "pointsrc.h"
 #include "rbp_key.h"
 #include "rbp_abi.h"
+#include "tscfake.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -298,11 +299,11 @@ void net_ui_paint_strip(void *fb, int w, int h, int pitch_px, int bpp)
     v.bpp = bpp;
     v.pix = fb;
 
-    int strip_pressed = (net_get_pressed() == TARGET_STRIP);
+    int pressed_tgt = net_get_pressed();
     int wifi_active = (s_st.wifi_enabled && s_st.wifi_connected);
     int bt_active = s_st.bt_enabled;
 
-    net_strip_paint(&v, wifi_active, bt_active, strip_pressed);
+    net_strip_paint(&v, wifi_active, bt_active, pressed_tgt);
 }
 
 void net_ui_present(void *real_fb, int w, int h, int pitch_px, int bpp)
@@ -404,6 +405,25 @@ int net_ui_touch(int down, int x, int y)
     } else if (act == NET_ACT_SET_TAB) {
         pointsrc_log("net_ui: tab switched to %d", val);
         s_dirty = 1;
+    } else if (act == NET_ACT_TOP_KEY) {
+        pointsrc_log("net_ui: top button KEY tapped -> select KEY pad row");
+        tscfake_emit(1, 1135, 390);
+        tscfake_emit(0, 1135, 390);
+    } else if (act == NET_ACT_TOP_STEMS) {
+        pointsrc_log("net_ui: top button STEMS tapped -> select STEMS pad row");
+        tscfake_emit(1, 1225, 390);
+        tscfake_emit(0, 1225, 390);
+    } else if (act == NET_ACT_TOP_RMX) {
+        pointsrc_log("net_ui: top button RMX tapped");
+        send_rx_key(0x0400, OP_PRESS, 0, 0);
+        send_rx_key(0x0400, OP_RELEASE, 0, 0);
+    } else if (act == NET_ACT_TOP_FXMOD) {
+        pointsrc_log("net_ui: top button FX MOD tapped -> open MOD MENU");
+        s_st.wifi_enabled = s_st.wifi_enabled; /* refresh */
+        net_open();
+        net_ui_touch(1, NET_TAB3_X0 + 10, NET_TAB_Y0 + 10);
+        net_ui_touch(0, NET_TAB3_X0 + 10, NET_TAB_Y0 + 10);
+        s_dirty = 1;
     } else if (act == NET_ACT_WIFI_TOGGLE) {
         s_st.wifi_enabled = !s_st.wifi_enabled;
         s_dirty = 1;
@@ -440,8 +460,8 @@ int net_ui_touch(int down, int x, int y)
         net_send_cmd("restart_net\n");
     } else if (act == NET_ACT_MOD_RESTART) {
         s_dirty = 1;
-        pointsrc_log("net_ui: restart rbp requested from mod menu");
-        system("systemctl restart rbp 2>/dev/null || /etc/init.d/rbp restart 2>/dev/null &");
+        pointsrc_log("net_ui: restart rblive4 requested from mod menu");
+        system("systemctl restart rblive4 2>/dev/null || systemctl restart rbp 2>/dev/null || pkill -9 rbp &");
     }
 
     if (s_pressed_val != val) {

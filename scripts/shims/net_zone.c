@@ -58,22 +58,54 @@ int net_feed(int down, int x, int y, int *act, int *val)
     if (act) *act = NET_ACT_NONE;
     if (val) *val = 0;
 
-    /* When closed: check if finger hits top bar strip pill */
+    /* When closed: check if finger hits top header buttons or strip pill */
     if (!s_open) {
         if (down) {
+            if (in_rect(x, y, NET_TOP_KEY_X0 - 5, 0, NET_TOP_KEY_X1 + 5, 48)) {
+                s_pressed_target = TARGET_TOP_KEY;
+                return MZ_FEED_TAKEN;
+            }
+            if (in_rect(x, y, NET_TOP_STEMS_X0 - 5, 0, NET_TOP_STEMS_X1 + 5, 48)) {
+                s_pressed_target = TARGET_TOP_STEMS;
+                return MZ_FEED_TAKEN;
+            }
+            if (in_rect(x, y, NET_TOP_RMX_X0 - 5, 0, NET_TOP_RMX_X1 + 5, 48)) {
+                s_pressed_target = TARGET_TOP_RMX;
+                return MZ_FEED_TAKEN;
+            }
+            if (in_rect(x, y, NET_TOP_FXMOD_X0 - 5, 0, NET_TOP_FXMOD_X1 + 5, 48)) {
+                s_pressed_target = TARGET_TOP_FXMOD;
+                return MZ_FEED_TAKEN;
+            }
             if (in_rect(x, y, NET_HIT_STRIP_X0, NET_HIT_STRIP_Y0, NET_HIT_STRIP_X1, NET_HIT_STRIP_Y1)) {
                 s_pressed_target = TARGET_STRIP;
                 return MZ_FEED_TAKEN;
             }
             return MZ_FEED_NONE;
         } else {
-            if (s_pressed_target == TARGET_STRIP) {
-                s_pressed_target = TARGET_NONE;
-                if (in_rect(x, y, NET_HIT_STRIP_X0, NET_HIT_STRIP_Y0, NET_HIT_STRIP_X1, NET_HIT_STRIP_Y1)) {
-                    s_open = 1;
-                    if (act) *act = NET_ACT_OPEN;
-                    return MZ_FEED_TAKEN;
-                }
+            int prev = s_pressed_target;
+            s_pressed_target = TARGET_NONE;
+
+            if (prev == TARGET_TOP_KEY && in_rect(x, y, NET_TOP_KEY_X0 - 8, 0, NET_TOP_KEY_X1 + 8, 48)) {
+                if (act) *act = NET_ACT_TOP_KEY;
+                return MZ_FEED_TAKEN;
+            }
+            if (prev == TARGET_TOP_STEMS && in_rect(x, y, NET_TOP_STEMS_X0 - 8, 0, NET_TOP_STEMS_X1 + 8, 48)) {
+                if (act) *act = NET_ACT_TOP_STEMS;
+                return MZ_FEED_TAKEN;
+            }
+            if (prev == TARGET_TOP_RMX && in_rect(x, y, NET_TOP_RMX_X0 - 8, 0, NET_TOP_RMX_X1 + 8, 48)) {
+                if (act) *act = NET_ACT_TOP_RMX;
+                return MZ_FEED_TAKEN;
+            }
+            if (prev == TARGET_TOP_FXMOD && in_rect(x, y, NET_TOP_FXMOD_X0 - 8, 0, NET_TOP_FXMOD_X1 + 8, 48)) {
+                if (act) *act = NET_ACT_TOP_FXMOD;
+                return MZ_FEED_TAKEN;
+            }
+            if (prev == TARGET_STRIP && in_rect(x, y, NET_HIT_STRIP_X0, NET_HIT_STRIP_Y0, NET_HIT_STRIP_X1, NET_HIT_STRIP_Y1)) {
+                s_open = 1;
+                if (act) *act = NET_ACT_OPEN;
+                return MZ_FEED_TAKEN;
             }
             return MZ_FEED_NONE;
         }

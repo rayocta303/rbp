@@ -19,7 +19,16 @@
 
 #include "menu_zone.h"   /* MZ_FEED_NONE, MZ_FEED_TAKEN */
 
-/* --- Top Bar Button Strip Geometry (KONSEP MOD RBP VIEW UTAMA, x: 939..1066) --- */
+/* --- Top Header Mod Buttons & Button Strip Geometry (x: 580..1066, y: 8..44) --- */
+#define NET_TOP_KEY_X0     580
+#define NET_TOP_KEY_X1     655
+#define NET_TOP_STEMS_X0   665
+#define NET_TOP_STEMS_X1   750
+#define NET_TOP_RMX_X0     760
+#define NET_TOP_RMX_X1     835
+#define NET_TOP_FXMOD_X0   845
+#define NET_TOP_FXMOD_X1   925
+
 #define NET_STRIP_X0       939
 #define NET_STRIP_X1      1066
 #define NET_STRIP_Y0         8
@@ -134,6 +143,10 @@ enum {
 enum {
     TARGET_NONE = 0,
     TARGET_STRIP,
+    TARGET_TOP_KEY,
+    TARGET_TOP_STEMS,
+    TARGET_TOP_RMX,
+    TARGET_TOP_FXMOD,
     TARGET_CLOSE,
     TARGET_TAB0,
     TARGET_TAB1,
@@ -152,6 +165,10 @@ enum {
     NET_ACT_OPEN,
     NET_ACT_CLOSE,
     NET_ACT_SET_TAB,        /* val = tab index */
+    NET_ACT_TOP_KEY,
+    NET_ACT_TOP_STEMS,
+    NET_ACT_TOP_RMX,
+    NET_ACT_TOP_FXMOD,
     NET_ACT_WIFI_TOGGLE,
     NET_ACT_WIFI_SCAN,
     NET_ACT_WIFI_CONNECT,   /* val = network row index */

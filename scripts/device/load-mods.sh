@@ -15,7 +15,11 @@ MOD_ENV_ARGS=""
 
 add_env() {
     export "$1=$2"
-    MOD_ENV_ARGS="$MOD_ENV_ARGS $1=$2"
+    if [ -z "$MOD_ENV_ARGS" ]; then
+        MOD_ENV_ARGS="$1=$2"
+    else
+        MOD_ENV_ARGS="$MOD_ENV_ARGS $1=$2"
+    fi
 }
 
 if [ "$MOD_CORE" = "1" ] && [ -f "$CORE_FILE" ]; then
@@ -35,29 +39,9 @@ if [ "$MOD_CORE" = "1" ] && [ -f "$CORE_FILE" ]; then
             ;;
     esac
 
-    # Panel asset tab slots (11 slots: 00..10 for KEY, STEMS, SAMPLES, STATUS)
-    add_env "RX3_TAB_DARK_00" "/root/pdj/rx3-key-selected.rgb565"
-    add_env "RX3_TAB_LIGHT_00" "/root/pdj/rx3-key-selected-light.rgb565"
-    add_env "RX3_TAB_DARK_01" "/root/pdj/rx3-stems-selected.rgb565"
-    add_env "RX3_TAB_LIGHT_01" "/root/pdj/rx3-stems-selected-light.rgb565"
-    add_env "RX3_TAB_DARK_02" "/root/pdj/rx3-status-none-selected.rgb565"
-    add_env "RX3_TAB_LIGHT_02" "/root/pdj/rx3-status-none-selected-light.rgb565"
-    add_env "RX3_TAB_DARK_03" "/root/pdj/rx3-none-selected.rgb565"
-    add_env "RX3_TAB_LIGHT_03" "/root/pdj/rx3-none-selected-light.rgb565"
-    add_env "RX3_TAB_DARK_04" "/root/pdj/rx3-samples-selected.rgb565"
-    add_env "RX3_TAB_LIGHT_04" "/root/pdj/rx3-samples-selected-light.rgb565"
-    add_env "RX3_TAB_DARK_05" "/root/pdj/rx3-samples-none-selected.rgb565"
-    add_env "RX3_TAB_LIGHT_05" "/root/pdj/rx3-samples-none-selected-light.rgb565"
-    add_env "RX3_TAB_DARK_06" "/root/pdj/rx3-samples-beatfx-selected.rgb565"
-    add_env "RX3_TAB_LIGHT_06" "/root/pdj/rx3-samples-beatfx-selected-light.rgb565"
-    add_env "RX3_TAB_DARK_07" "/root/pdj/rx3-single-key-none.rgb565"
-    add_env "RX3_TAB_LIGHT_07" "/root/pdj/rx3-single-key-none-light.rgb565"
-    add_env "RX3_TAB_DARK_08" "/root/pdj/rx3-single-key-selected.rgb565"
-    add_env "RX3_TAB_LIGHT_08" "/root/pdj/rx3-single-key-selected-light.rgb565"
-    add_env "RX3_TAB_DARK_09" "/root/pdj/rx3-single-stems-none.rgb565"
-    add_env "RX3_TAB_LIGHT_09" "/root/pdj/rx3-single-stems-none-light.rgb565"
-    add_env "RX3_TAB_DARK_10" "/root/pdj/rx3-single-stems-selected.rgb565"
-    add_env "RX3_TAB_LIGHT_10" "/root/pdj/rx3-single-stems-selected-light.rgb565"
+    # Custom tabs in performance view are moved to top header bar to prevent
+    # obscuring native ZOOM, GRID, STATUS and BEAT FX controls.
+    # Tab asset slots are disabled here so librx3_core leaves native tabs untouched.
 
     # Pad Glyph Atlases
     add_env "RX3_PAD_ATLAS" "/root/pdj/rx3-glyph-atlas-dark.rgb565"

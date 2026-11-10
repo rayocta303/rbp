@@ -4,6 +4,7 @@
 #include "net_info.h"
 #include "pointsrc.h"
 #include "rbp_abi.h"
+#include "rbp_key.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,12 +16,26 @@
 #endif
 extern void *dlsym(void *handle, const char *symbol);
 
-#define SHORTCUT_THEME_X0 960
-#define SHORTCUT_THEME_X1 1220
-#define SHORTCUT_THEME_Y0 8
-#define SHORTCUT_THEME_Y1 44
+#define SHORTCUT_CARD_X0       792
+#define SHORTCUT_CARD_Y0        89
+#define SHORTCUT_CARD_X1      1259
+#define SHORTCUT_CARD_Y1       198
+
+#define SHORTCUT_BTN_DARK_X0    812
+#define SHORTCUT_BTN_DARK_X1   1015
+#define SHORTCUT_BTN_LIGHT_X0  1035
+#define SHORTCUT_BTN_LIGHT_X1  1238
+#define SHORTCUT_BTNS_Y0        144
+#define SHORTCUT_BTNS_Y1        190
 
 static int s_theme_pressed = 0;
+
+static unsigned int ov_color(int bpp, int r, int g, int b)
+{
+    if (bpp == 32)
+        return (unsigned int)((r << 16) | (g << 8) | b);
+    return (unsigned int)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
+}
 
 static void ov_set(const struct menu_view *v, int fx, int fy, unsigned int pv)
 {
@@ -138,6 +153,7 @@ static void ov_text_center(const struct menu_view *v, int x0, int y0, int x1, in
 
 typedef int (*rx3_theme_is_light_fn)(void);
 typedef void (*rx3_theme_toggle_fn)(void);
+static int s_theme_is_light = 0;
 
 static int ov_theme_is_light(void)
 {
@@ -154,21 +170,48 @@ static int ov_theme_is_light(void)
         }
         fclose(f);
     }
-    return 0;
+
+    /* Fallback: check /tmp/rx3-theme.off */
+    if (access("/tmp/rx3-theme.off", F_OK) == 0) {
+        return 0; /* Forced dark */
+    }
+    return s_theme_is_light;
 }
 
 static void ov_theme_toggle(void)
 {
+    s_theme_is_light = !s_theme_is_light;
+
     rx3_theme_toggle_fn fn = (rx3_theme_toggle_fn)dlsym(RTLD_DEFAULT, "rx3_theme_toggle");
     if (fn) {
         fn();
         pointsrc_log("ui_overlay: theme toggled via direct function");
+    }
+
+    FILE *f = fopen("/tmp/rx3-theme.toggle", "w");
+    if (f) {
+        fputs("1\n", f);
+        fclose(f);
+        pointsrc_log("ui_overlay: theme toggled via /tmp/rx3-theme.toggle");
+    }
+
+    /* Send native SHIFT + SHORTCUT key sequence to trigger theme-white's toggle */
+    send_rx_key(0x4103, OP_PRESS, 1, 0);
+    send_rx_key(K_SHORTCUT, OP_PRESS, CH_GLOBAL, 0);
+    send_rx_key(K_SHORTCUT, OP_RELEASE, CH_GLOBAL, 0);
+    send_rx_key(0x4103, OP_RELEASE, 1, 0);
+    pointsrc_log("ui_overlay: theme toggled via SHIFT+SHORTCUT key sequence");
+
+    /* Also toggle /tmp/rx3-theme.off sentinel */
+    if (access("/tmp/rx3-theme.off", F_OK) == 0) {
+        unlink("/tmp/rx3-theme.off");
+        pointsrc_log("ui_overlay: removed /tmp/rx3-theme.off (switch to light)");
     } else {
-        FILE *f = fopen("/tmp/rx3-theme.toggle", "w");
-        if (f) {
-            fputs("1\n", f);
-            fclose(f);
-            pointsrc_log("ui_overlay: theme toggled via /tmp/rx3-theme.toggle");
+        FILE *fo = fopen("/tmp/rx3-theme.off", "w");
+        if (fo) {
+            fputs("off\n", fo);
+            fclose(fo);
+            pointsrc_log("ui_overlay: created /tmp/rx3-theme.off (switch to dark)");
         }
     }
 }
@@ -196,43 +239,100 @@ void ui_overlay_draw(const struct menu_view *v, int browse_mode)
         ov_text(v, 430, line_fy, info_str, bg_dark, ink_green, 430, 1270);
     } else if (browse_mode == 10) {
         /* SHORTCUT screen (mode 10):
-         * Place Theme Toggle button at x: 960..1220, y: 8..44 (top right header area).
+         * Overwrite JOG LCD card at x: 792..1259, y: 89..198 with Theme Toggle card.
+         * Matches native Pioneer SHORTCUT card aesthetics:
+         *   - Top accent bar (amber/gold) at y: 89..91
+         *   - Card background: #212021 (33, 32, 33)
+         *   - Card border: #393c39 (57, 60, 57)
+         *   - Title: "THEME" at x: 812, y: 108 in #949694 (148, 150, 148)
+         *   - Divider line at y: 138
+         *   - Segmented buttons: [ DARK ] (812..1015) and [ LIGHT ] (1035..1238) at y: 144..190
          */
         int is_light = ov_theme_is_light();
-        const char *label = is_light ? "THEME: LIGHT" : "THEME: DARK";
 
-        unsigned int fill_col = is_light ? 0x00dedbde : 0x0020242c;
-        unsigned int bdr_col  = s_theme_pressed ? 0x0033ccff : (is_light ? 0x000088cc : 0x0000a0ff);
-        unsigned int text_col = is_light ? 0x001c1c1e : 0x00ffffff;
+        unsigned int card_bg   = ov_color(v->bpp, 33, 32, 33);
+        unsigned int card_bdr  = ov_color(v->bpp, 57, 60, 57);
+        unsigned int card_top  = ov_color(v->bpp, 99, 48, 16);
+        unsigned int title_col = ov_color(v->bpp, 148, 150, 148);
 
-        if (v->bpp == 16) {
-            fill_col = is_light ? 0xdedb : 0x2124;
-            bdr_col  = s_theme_pressed ? 0x367f : (is_light ? 0x0459 : 0x051f);
-            text_col = is_light ? 0x18e3 : 0xffff;
+        /* Fill card background and border */
+        ov_fill(v, SHORTCUT_CARD_X0, SHORTCUT_CARD_Y0 + 3, SHORTCUT_CARD_X1, SHORTCUT_CARD_Y1, card_bg);
+        ov_fill(v, SHORTCUT_CARD_X0, SHORTCUT_CARD_Y0, SHORTCUT_CARD_X1, SHORTCUT_CARD_Y0 + 2, card_top);
+        ov_rect(v, SHORTCUT_CARD_X0, SHORTCUT_CARD_Y0, SHORTCUT_CARD_X1, SHORTCUT_CARD_Y1, card_bg, card_bdr);
+
+        /* Divider line under title */
+        ov_fill(v, SHORTCUT_CARD_X0, 138, SHORTCUT_CARD_X1, 138, card_bdr);
+
+        /* Card Title: THEME */
+        ov_text(v, 812, 108, "THEME", card_bg, title_col, 812, 1000);
+
+        /* Segmented buttons: [ DARK ] and [ LIGHT ] */
+        unsigned int dark_fill, dark_bdr, dark_text;
+        unsigned int light_fill, light_bdr, light_text;
+
+        if (!is_light) {
+            /* DARK is active */
+            dark_fill  = (s_theme_pressed == 1) ? ov_color(v->bpp, 0, 80, 140) : ov_color(v->bpp, 8, 40, 57);
+            dark_bdr   = ov_color(v->bpp, 0, 160, 255);
+            dark_text  = ov_color(v->bpp, 255, 255, 255);
+
+            light_fill = (s_theme_pressed == 2) ? ov_color(v->bpp, 40, 40, 40) : ov_color(v->bpp, 24, 24, 24);
+            light_bdr  = ov_color(v->bpp, 57, 60, 57);
+            light_text = ov_color(v->bpp, 148, 150, 148);
+        } else {
+            /* LIGHT is active */
+            dark_fill  = (s_theme_pressed == 1) ? ov_color(v->bpp, 40, 40, 40) : ov_color(v->bpp, 24, 24, 24);
+            dark_bdr   = ov_color(v->bpp, 57, 60, 57);
+            dark_text  = ov_color(v->bpp, 148, 150, 148);
+
+            light_fill = (s_theme_pressed == 2) ? ov_color(v->bpp, 0, 120, 180) : ov_color(v->bpp, 0, 136, 204);
+            light_bdr  = ov_color(v->bpp, 0, 160, 255);
+            light_text = ov_color(v->bpp, 255, 255, 255);
         }
 
-        ov_rect(v, SHORTCUT_THEME_X0, SHORTCUT_THEME_Y0,
-                SHORTCUT_THEME_X1, SHORTCUT_THEME_Y1, fill_col, bdr_col);
-        ov_text_center(v, SHORTCUT_THEME_X0, SHORTCUT_THEME_Y0,
-                       SHORTCUT_THEME_X1, SHORTCUT_THEME_Y1,
-                       label, fill_col, text_col);
+        ov_rect(v, SHORTCUT_BTN_DARK_X0, SHORTCUT_BTNS_Y0,
+                SHORTCUT_BTN_DARK_X1, SHORTCUT_BTNS_Y1, dark_fill, dark_bdr);
+        ov_text_center(v, SHORTCUT_BTN_DARK_X0, SHORTCUT_BTNS_Y0,
+                       SHORTCUT_BTN_DARK_X1, SHORTCUT_BTNS_Y1,
+                       "DARK", dark_fill, dark_text);
+
+        ov_rect(v, SHORTCUT_BTN_LIGHT_X0, SHORTCUT_BTNS_Y0,
+                SHORTCUT_BTN_LIGHT_X1, SHORTCUT_BTNS_Y1, light_fill, light_bdr);
+        ov_text_center(v, SHORTCUT_BTN_LIGHT_X0, SHORTCUT_BTNS_Y0,
+                       SHORTCUT_BTN_LIGHT_X1, SHORTCUT_BTNS_Y1,
+                       "LIGHT", light_fill, light_text);
     }
 }
 
 int ui_overlay_touch(int down, int x, int y, int browse_mode)
 {
     if (browse_mode == 10) {
-        if (x >= SHORTCUT_THEME_X0 && x <= SHORTCUT_THEME_X1 &&
-            y >= SHORTCUT_THEME_Y0 && y <= SHORTCUT_THEME_Y1) {
-            if (down) {
-                s_theme_pressed = 1;
-            } else {
-                if (s_theme_pressed) {
-                    s_theme_pressed = 0;
-                    ov_theme_toggle();
+        if (y >= SHORTCUT_BTNS_Y0 && y <= SHORTCUT_BTNS_Y1) {
+            if (x >= SHORTCUT_BTN_DARK_X0 && x <= SHORTCUT_BTN_DARK_X1) {
+                if (down) {
+                    s_theme_pressed = 1;
+                } else {
+                    if (s_theme_pressed == 1) {
+                        s_theme_pressed = 0;
+                        if (ov_theme_is_light()) {
+                            ov_theme_toggle();
+                        }
+                    }
                 }
+                return 1;
+            } else if (x >= SHORTCUT_BTN_LIGHT_X0 && x <= SHORTCUT_BTN_LIGHT_X1) {
+                if (down) {
+                    s_theme_pressed = 2;
+                } else {
+                    if (s_theme_pressed == 2) {
+                        s_theme_pressed = 0;
+                        if (!ov_theme_is_light()) {
+                            ov_theme_toggle();
+                        }
+                    }
+                }
+                return 1;
             }
-            return 1;
         }
         if (!down) {
             s_theme_pressed = 0;

@@ -375,19 +375,53 @@ void net_strip_paint(const struct menu_view *v,
      * - High-resolution anti-aliased WiFi (28x22) and Bluetooth (16x24) glyphs
      */
 
+    /*
+     * Top Header Mod Buttons & Network Status:
+     * - KEY: x 580..655, y 8..44
+     * - STEMS: x 665..750, y 8..44
+     * - RMX: x 760..835, y 8..44
+     * - MODS: x 845..925, y 8..44
+     * - Wi-Fi & BT: x 939..1066, y 8..44
+     * Placed cleanly in the top bar to leave ZOOM, GRID, STATUS & BEAT FX 100% native!
+     */
+
+    /* 1. KEY button */
+    int key_prs = (pressed == TARGET_TOP_KEY);
+    unsigned int key_col = key_prs ? COL_ACCENT_HOV : COL_TEXT_WHITE;
+    np_fill(v, NET_TOP_KEY_X0, NET_STRIP_Y0 + 4, NET_TOP_KEY_X0, NET_STRIP_Y1 - 8, COL_BORDER_BRT);
+    np_text_center(v, NET_TOP_KEY_X0, NET_STRIP_Y0, NET_TOP_KEY_X1, NET_STRIP_Y1,
+                   "KEY", COL_CARD_BG, key_col);
+
+    /* 2. STEMS button */
+    int stems_prs = (pressed == TARGET_TOP_STEMS);
+    unsigned int stems_col = stems_prs ? COL_ACCENT_HOV : COL_TEXT_WHITE;
+    np_fill(v, NET_TOP_STEMS_X0 - 5, NET_STRIP_Y0 + 4, NET_TOP_STEMS_X0 - 5, NET_STRIP_Y1 - 8, COL_BORDER_BRT);
+    np_text_center(v, NET_TOP_STEMS_X0, NET_STRIP_Y0, NET_TOP_STEMS_X1, NET_STRIP_Y1,
+                   "STEMS", COL_CARD_BG, stems_col);
+
+    /* 3. RMX button */
+    int rmx_prs = (pressed == TARGET_TOP_RMX);
+    unsigned int rmx_col = rmx_prs ? COL_ACCENT_HOV : COL_TEXT_WHITE;
+    np_fill(v, NET_TOP_RMX_X0 - 5, NET_STRIP_Y0 + 4, NET_TOP_RMX_X0 - 5, NET_STRIP_Y1 - 8, COL_BORDER_BRT);
+    np_text_center(v, NET_TOP_RMX_X0, NET_STRIP_Y0, NET_TOP_RMX_X1, NET_STRIP_Y1,
+                   "RMX", COL_CARD_BG, rmx_col);
+
+    /* 4. FX MOD button */
+    int fxmod_prs = (pressed == TARGET_TOP_FXMOD);
+    unsigned int fxmod_col = fxmod_prs ? COL_ACCENT_HOV : COL_TEXT_WHITE;
+    np_fill(v, NET_TOP_FXMOD_X0 - 5, NET_STRIP_Y0 + 4, NET_TOP_FXMOD_X0 - 5, NET_STRIP_Y1 - 8, COL_BORDER_BRT);
+    np_text_center(v, NET_TOP_FXMOD_X0, NET_STRIP_Y0, NET_TOP_FXMOD_X1, NET_STRIP_Y1,
+                   "MODS", COL_CARD_BG, fxmod_col);
+
+    /* 5. Wi-Fi & BT pill */
     /* Left vertical divider line (|) at x=939 */
     np_fill(v, NET_STRIP_X0, NET_STRIP_Y0 + 4, NET_STRIP_X0, NET_STRIP_Y1 - 8, COL_BORDER_BRT);
 
     /* Right vertical divider line (|) at x=1066 */
     np_fill(v, NET_STRIP_X1, NET_STRIP_Y0 + 4, NET_STRIP_X1, NET_STRIP_Y1 - 8, COL_BORDER_BRT);
 
-    /* Icon colors:
-     *   active   -> bright crisp white (0xffffff)
-     *   inactive -> subtle dim gray (matching native Pioneer inactive text)
-     *   pressed  -> brief touch feedback (electric blue) WITHOUT ANY BACKGROUND BOX!
-     */
     unsigned int wifi_col, bt_col;
-    if (pressed) {
+    if (pressed == TARGET_STRIP) {
         wifi_col = COL_ACCENT_HOV;
         bt_col   = COL_ACCENT_HOV;
     } else {
