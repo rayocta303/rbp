@@ -1,41 +1,44 @@
-# 00 — Overview
+# 00 — Overview: RBP-Amlogic-S905X
 
-This project runs the standalone **Pioneer DJ XDJ-RX3 rekordbox player** (`rbp`,
-called `rb` internally) on **Amlogic S905X-series TV Boxes/SBCs** and the **Raspberry Pi 4B**.
-The XDJ-RX3 firmware builds its player as **soft-float ARM32**; both Amlogic S905X (Cortex-A53)
-and Broadcom BCM2711 (Cortex-A72) execute soft-float EABI ELF natively via
-**32-bit EL0 Support** (`CONFIG_COMPAT`) in aarch64 Linux kernels (Armbian / Pi OS).
+This project runs the standalone **Pioneer DJ XDJ-RX3 rekordbox player** (`rbp`, internally called `rb`) on low-cost **Amlogic S905X-series TV Boxes and Single Board Computers (SBCs)** under **Armbian aarch64** (Linux 5.15+).
 
-There is no CPU emulation. The real `rbp` binary from the XDJ-RX3 firmware runs
-directly on bare metal silicon, with a set of thin shims translating standard hardware — HDMI
-framebuffer, USB MIDI controller (**DDJ-FLX6** or **DDJ-FLX4**), USB audio, and touch pointer —
-into what `rbp` expects.
+The native XDJ-RX3 firmware builds its core player application as a **soft-float ARM32** executable. The quad-core 64-bit Cortex-A53 processor in the Amlogic S905X executes soft-float EABI ELF binaries directly on bare metal silicon through the kernel's **32-bit EL0 Support** (`CONFIG_COMPAT`).
 
-Target documents:
-- [25 — Amlogic S905X](25-amlogic-s905x.md): S905X TV Box architecture, Armbian setup, and meson-drm.
-- [13 — Raspberry Pi 4](13-raspberrypi4.md): Pi 4 image, `cmdline.txt` recipe, and vc4 setup.
-- [26 — DDJ-FLX6 MIDI](26-flx6-midi.md): 4-channel mapping, 6 Beat FX slots, Merge FX, and jog mechanics.
-- [15 — DDJ-FLX4 MIDI](15-flx4-midi.md): 2-channel mapping for DDJ-FLX4.
+There is no CPU emulation. The genuine `rbp` executable executes at full native clock speed, with thin userland C shims translating standard Linux subsystems (HDMI framebuffer, ALSA audio, USB MIDI controller, USB capacitive touch pointer) into the proprietary interfaces expected by the Pioneer engine.
 
-## The pieces
+---
+
+## Primary Architectural Pillars
+
+1. **Target Board:** [25 — Amlogic S905X](25-amlogic-s905x.md) (Meson GXL TV Boxes / SBCs, Armbian aarch64, 32-bit EL0).
+2. **Display Subsystem:** [06 — Display](06-display.md) (DirectFB 1.4 fbdev driver, pixel-accurate 1280×800 at 16 bpp, zero scaling).
+3. **Control Surface:** [26 — DDJ-FLX6 MIDI](26-flx6-midi.md) (4-channel mixing, 720 PPR jogs, 6 Beat FX racks) and [15 — DDJ-FLX4 MIDI](15-flx4-midi.md) (2-channel).
+4. **Audio Engine:** [09 — Audio](09-audio.md) (Low-latency ALSA 4-channel `S24_3LE`, Master RCA + Cue monitoring).
+5. **UI & Navigation:** [28 — Network Settings & Mod UI](28-network-settings-overlay-plan.md) (Top header mod navigation, clean Wi-Fi/BT strip, and in-place SHORTCUT Theme card).
+
+---
+
+## System Architecture Diagram
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
-│              Target Board: Amlogic S905X or Raspberry Pi 4B                │
-│  Meson GXL / BCM2711 · HDMI 1280×800 · USB-A host · USB Touch CTP         │
-│  DDJ-FLX6 or DDJ-FLX4 on USB: 4-Ch USB Audio + ALSA MIDI Sequencer         │
+│                  Target Hardware: Amlogic S905X (Meson GXL)                │
+│  Quad-Core Cortex-A53 · Armbian aarch64 (Linux 5.15+ with 32-bit EL0)      │
+│  HDMI 1280×800 Native · USB 2.0 Host · USB Capacitive Touch CTP            │
+│  Pioneer DDJ-FLX6 (4-Ch) or DDJ-FLX4: Low-Latency ALSA Audio + USB MIDI    │
 │                                                                            │
 │  ┌───────────────── /opt/rblive4/rbx3-run (chroot) ───────────────────────┐│
-│  │  soft-float glibc 2.13 + RX3 libs + DirectFB 1.4.16                    ││
+│  │  soft-float glibc 2.13 + RX3 shared libraries + DirectFB 1.4.16        ││
 │  │                                                                        ││
-│  │   rbp (XDJ-RX3 Rekordbox Standalone Player)                            ││
+│  │   rbp (XDJ-RX3 Rekordbox Standalone Player Engine)                      ││
 │  │      ▲        ▲           ▲            ▲            ▲                  ││
 │  │      │        │           │            │            │                  ││
 │  │  netshim   knobshim   audioshim     fbshim     crashcatch              ││
-│  │  (ProDJ    (FLX6/FLX4 (ALSA S24_3LE (1280x800  (SIGSEGV guard)         ││
-│  │   Link)     MIDI Map)  Low Latency)  DirectFB)                         ││
+│  │  (ProDJ    (FLX6/FLX4 (ALSA 4-Ch    (1280x800   (SIGSEGV guard)        ││
+│  │   Link)     MIDI Map)  S24_3LE)      Shadow FB)                        ││
 │  │                                                                        ││
-│  │   libdirectfb_fbdev.so (rebuilt) ── single-page fbdev direct present   ││
+│  │   librx3_core.so (Performance Mods Hook Suite by @dj_ventotto)         ││
+│  │   libdirectfb_fbdev.so (Single-page fbdev direct presentation)         ││
 │  └────────────────────────────────────────────────────────────────────────┘│
 │         ▲            ▲               ▲                   ▲                 │
 │     wlan0/eth0   /dev/snd/seq    /dev/fb0        /dev/input/event*         │
@@ -43,100 +46,24 @@ Target documents:
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Why each piece is needed
+---
 
-| Mismatch | XDJ-RX3 has | Pi 4 has | Solution |
+## Hardware Translation Matrix
+
+| Subsystem | Native XDJ-RX3 Hardware | Amlogic S905X Implementation | Translation Method |
 |---|---|---|---|
-| CPU float ABI | soft-float ARM32 | hard-float kernel, armhf userland | soft-float chroot; the kernel runs soft-float ELF natively, and only needs 32-bit emulation to do it (its own bitness does not matter) |
-| Display | 1280×800 landscape, RGB565 | `vc4drmfb` over HDMI, measured 1280×800 at 16 bpp RGB565 — `rbp`'s own surface | rebuilt DirectFB fbdev driver: the present path bridges any geometry/format difference, and on the measured panel the difference is **none** — what needed fixing there was the buffer mode, decided from the fb's page count. A monitor of *any other size* is the case the `scale` rung exists for, and the driver selects it by itself when the real fb disagrees with the logical one — **run on glass at 1280×720, 960×600, 800×600 and 1920×1080 (S10.1–S10.3, 2026-09-26), whole UI, 1.1–3.4 ms of a 16.67 ms frame, with the 1280×800 panel unchanged (S10.4)**; `display-watch.sh` restarts the player when a swap changes the geometry mid-session, and **that half is still unrun** ([06](06-display.md#a-mismatch-selects-the-rung-by-itself)) |
-| Pointing | tsc2007 resistive via `/dev/tsc2007_2-0048` | **no touchscreen** — an evdev pointer | `fbshim.so` synthesises the tsc2007 protocol from a discovered evdev device |
-| Controls | Pioneer front-panel MCUs (EUP/SUB) | DDJ-FLX4 over USB MIDI | `knobshim.so` maps MIDI → `sendKey()` |
-| Audio | 3× discrete CS4344 DACs | the FLX4's 4-channel USB audio | `audioshim.so` maps rbp's streams onto the FLX4's output pairs |
-| USB | 2 host ports + sub-MCU | USB-A host ports | `usb-watch.sh` + native DeviceSQL import |
-| Music DB | internal EDB daemon | — | RX3 `edb_streamd` runs in the chroot |
-| Networking | `eth0` with a Pro DJ Link peer on the LAN | `eth0` **down**, WiFi up | `netshim.so` rewrites the interface *name* in rbp's whitelisted `eth0` introspection — **built and host-verified, off by default, not deployed** ([18](18-prodjlink.md)) |
+| **CPU ABI** | Soft-float ARM32 | Cortex-A53 (aarch64) | 32-bit EL0 kernel compat + soft-float glibc chroot |
+| **Display** | 1280×800 RGB565 LVDS | HDMI 1280×800 60Hz | `meson-drm` (/dev/fb0) + patched DirectFB fbdev driver |
+| **Touchscreen** | SPI-attached `tsc2007` | USB Capacitive Touch Panel (CTP) | `fbshim.so` converts evdev touch events to fake `tsc2007` protocol |
+| **Controls** | Pioneer EUP/SUB front MCUs | Pioneer DDJ-FLX6 / DDJ-FLX4 | `knobshim.so` maps ALSA raw MIDI messages to internal `sendKey()` events |
+| **Audio** | 3× Cirrus Logic CS4344 DACs | USB Audio (`hw:CARD=DDJFLX6`) | `audioshim.so` routes Master and Cue channels in `S24_3LE` format |
+| **USB Media** | Sub-MCU media socket | USB-A 2.0 Host port | `start-rb.sh` handles auto-mount and DeviceSQL database import |
+| **Pro DJ Link** | Dedicated Ethernet hardware | Wi-Fi (`wlan0`) or Ethernet (`eth0`) | `netshim.so` overrides interface binding for UDP ports 50000..50002 |
 
-Every row above is a *device* difference. Nothing in the list touches the
-binary, which is why the `rbp` patch table and the shims' hardcoded `rbp`
-addresses survive the move unchanged — see
-[03 — Port plan](03-port-plan.md).
+---
 
-## Data flow for a typical action
+## Provenance & Attribution
 
-**Browsing a USB stick**
-
-```
-stick → kernel usb-storage → usb-watch.sh mounts /opt/rblive4/media/usb1/sda1
-      → bind-mount into chroot at /media/usb1/sda1
-      → write "mount /media/usb1/sda1" to /tmp/udev_usb1
-      → rbp UsbMountManager → DbProxy → DbIF::mount('C')
-      → DeviceSQL scans export.pdb → detect flag = 2
-      → source list shows the drive, categories populate natively
-```
-
-A **second** stick takes the same route a slot over: the first candidate in
-`/sys/block` order that actually carries an export is USB 1, the next is USB 2,
-onto `/opt/rblive4/media/usb2/sda1` → `/media/usb2/sda1` → `/tmp/udev_usb2`. rbp
-holds one `ui::UsbStorageManager` per channel, so both are separate devices and
-the settings panel's `USB1 STOP`/`USB2 STOP` rows can eject either one on its own channel.
-
-**Loading + playing a track**
-
-```
-LOAD  → FLX4 MIDI → knobshim → sendKey(0x4311)
-      → rbp loads track + ANLZ analysis → waveform
-PLAY  → knobshim → sendKey(0x4101)
-      → DjEngineIF::play → PlayEngine clocked by the ALSA callback
-      → audioshim packs S24_LE periods into S24_3LE for hw:CARD=DDJFLX4,DEV=0
-      → master (pair 1) + headphones (pair 2) on the FLX4
-```
-
-The note numbers above are what the FLX4 map sends. The map is written and
-fixture-tested, and the unit's own messages have been inventoried with
-`aseqdump`, but the tables themselves still come from Pioneer's published MIDI
-list: no control has yet been pressed and watched through to rbp. See
-[15 — DDJ-FLX4 MIDI](15-flx4-midi.md).
-
-## Repository map
-
-See the top-level [README](../README.md). The device facts for the previous
-target are in [01 — Device survey](01-device-survey.md), the comparison of all
-four machines in [02 — Hardware](02-hardware.md), and the reuse/change plan in
-[03 — Port plan](03-port-plan.md).
-
-## Prerequisites
-
-* A Raspberry Pi 4B running **Pi OS Lite 32-bit**, with root and network.
-* A DDJ-FLX4 (or, for bring-up, nothing at all — display, pointing and audio can
-  all be tested before a controller is plugged in).
-* A workstation with `arm-linux-gnueabi-gcc` (soft-float) and, for the DirectFB
-  build, Docker or an equivalent ARM toolchain.
-* Extracted XDJ-RX3 v1.20 assets (rootfs, gui, `rbp-audio`) — see
-  [04 — Firmware assets](04-firmware-assets.md).
-* An SD card with room for the chroot — a few hundred MB extracted, which is
-  nothing on an 8 GB card but is not nothing on a 4 GB one.
-
-## Caveats
-
-* **The tree is mid-port.** Where a number is an expectation rather than a
-  measurement, the document says so; [docs/README](README.md) explains the
-  convention, and [13](13-raspberrypi4.md)'s bring-up table is the honest
-  current state.
-* **Use the 32-bit image — and do not be alarmed if the kernel is 64-bit.** The
-  shims' 32-bit-ARM-only constraints (32-bit `smem_start`/`time_t`, `SYS_mmap2`,
-  `uc_mcontext.arm_*`, ARM32 machine-code patching) are properties of the
-  *chroot's* binaries, which are 32-bit whatever the host runs — there is no
-  64-bit `rbp`. So what the kernel must provide is 32-bit emulation, not a 32-bit
-  kernel, and current Pi OS 32-bit images already ship the arm64 kernel.
-  `install.sh` prints both and then tests it for real by executing a 32-bit
-  binary in the chroot.
-* **The HDMI mode comes from the kernel command line**, not `config.txt`, and
-  the kernel console must be moved off the framebuffer
-  ([13](13-raspberrypi4.md#the-hdmi-mode)). Getting this wrong looks like a
-  display bug and is not one.
-* **`vc4` does not block on vblank.** Its `drm_fbdev` returns from
-  `FBIOPAN_DISPLAY` immediately, so the pacer in the fb shim is load-bearing,
-  not a nicety — without it `rbp`'s RT-priority render thread spins a core.
-* This is a DJ player on a general-purpose computer. It has no vendor OS to fall
-  back to, and no panel MCU: the shims own the device nodes they fake, and
-  `fix-dev.sh` has to recreate them after every reboot.
+This project is an independent implementation built upon:
+* **[salesforcedoc/rbpi4b](https://github.com/salesforcedoc/rbpi4b)** by `@salesforcedoc` / `@i.erhan.es` (Base shims, DirectFB patches, and touch translation).
+* **[@dj_ventotto](https://www.instagram.com/dj_ventotto/)** (XDJ-RX3 performance mod suite: `librx3_core.so`, Stems separation, Harmonic Mixing, Bright Theme).

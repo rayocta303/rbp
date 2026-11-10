@@ -1,9 +1,9 @@
 # 11 — Runtime launcher
 
-[`scripts/device/start-rb.sh`](../scripts/device/start-rb.sh) runs on the Pi, as
-root, over SSH, and is the normal way to bring up the player. It deploys to
+[`scripts/device/start-rb.sh`](../scripts/device/start-rb.sh) runs on the Amlogic S905X target board (or Raspberry Pi 4B), as
+root, over SSH or via systemd (`rblive4.service`), and is the primary supervisor for bringing up the player. It deploys to
 `$RB_DEPLOY_ROOT/start-rb.sh` (`/opt/rblive4/start-rb.sh`) with `lib.sh`,
-`fix-dev.sh`, `usb-watch.sh` and `display-watch.sh` beside it.
+`fix-dev.sh`, `usb-watch.sh`, `load-mods.sh` and `display-watch.sh` beside it.
 
 It is **not** something to launch from the console you intend to keep using: the
 UI takes over the HDMI framebuffer, and the launcher sleeps until rbp exits

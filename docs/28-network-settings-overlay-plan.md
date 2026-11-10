@@ -1,159 +1,111 @@
-# Perencanaan Fitur: OS Network Settings Overlay (Wi-Fi & Bluetooth) di Tampilan RBP
+# 28 — Network Settings Overlay & Top Header Mod Navigation
 
-Dokumen ini merinci arsitektur, desain visual, antarmuka sentuh, integrasi OS Linux, dan tahapan implementasi fitur **Pengaturan Wi-Fi & Bluetooth Level OS di Tampilan RBP** (Network Settings Overlay) dan **Tombol Strip Wi-Fi & Bluetooth pada Top Bar** untuk Pioneer XDJ-RX3 yang berjalan pada Amlogic S905X (Armbian Linux).
-
----
-
-## 1. Analisis Kebutuhan & Konsep Dasar
-
-### A. Karakteristik Bawaan `rbp` (XDJ-RX3)
-- Software pemutar Pioneer Rekordbox Player (`/root/pdj/rbp`) dirancang untuk hardware asli XDJ-RX3 yang **tidak memiliki kartu jaringan Wi-Fi maupun Bluetooth** (hanya kabel Ethernet Pro DJ Link dan USB).
-- Di dalam kode binary `rbp`, **sama sekali tidak ada view, halaman, objek GUI, maupun menu untuk konfigurasi Wi-Fi / Bluetooth**. Menu Utility bawaan hanya menyediakan setting IP statis/DHCP kabel LAN.
-
-### B. Kebutuhan Pengguna pada Platform Amlogic S905X
-- Mesin Amlogic S905X menjalankan **Armbian Linux** lengkap yang memiliki hardware adaptor Wi-Fi (`wlan0`) dan Bluetooth (`hci0`), serta didukung oleh stack jaringan `NetworkManager` (`nmcli`), `rfkill`, dan `bluez`.
-- Pengguna ingin mengendalikan konektivitas OS ini **langsung dari antarmuka visual RBP di layar sentuh unit / VNC** tanpa perlu keluar ke terminal SSH atau membuka desktop Linux terpisah.
-- Solusi: **Layering Overlay Shims (`fbshim.so`)**:
-  1. Menambahkan **Tombol Strip Wi-Fi & Bluetooth** di baris atas (Top Bar) sebagai indikator status sekaligus tombol pembuka.
-  2. Menampilkan **Halaman Pengaturan Jaringan OS** ("DISINI PENGATURAN JARINGAN") sebagai layer di atas RBP (rentang `y: 50..710`), sehingga pengguna dapat scan Wi-Fi, memasukkan password via virtual keyboard, menghubungkan hotspot, dan mengatur Bluetooth langsung dari layar sentuh konsol.
+Dokumentasi arsitektur, desain visual, antarmuka sentuh, integrasi OS Linux, dan tata letak fitur **Pengaturan Jaringan OS (Wi-Fi & Bluetooth)**, **Tombol Mod pada Top Header Bar (`KEY`, `STEMS`, `RMX`, `MODS`)**, serta **Card Theme Toggle pada Layar SHORTCUT** untuk proyek **RBP-Amlogic-S905X**.
 
 ---
 
-## 2. Desain Visual & Tata Letak Antarmuka (UI Layout)
+## 1. Latar Belakang & Konsep Arsitektur
 
-### A. Strip Tombol Wi-Fi & Bluetooth pada Top Bar
-Berdasarkan referensi visual:
-```
-+--------------------------------------------------------------------------------------------------+
-| REMAIN 00:00:00 [======== Progress Bar ========]    [ (•) Wi-Fi  * BT ]  00:00:00  [< INFO ]    |  y: 0..50
-+--------------------------------------------------------------------------------------------------+
-```
+### A. Masalah pada Hardware XDJ-RX3 Bawaan
+- Firmware Pioneer XDJ-RX3 (`/root/pdj/rbp`) dirancang untuk konsol fisik yang hanya memiliki port Ethernet Pro DJ Link (tanpa modul Wi-Fi atau Bluetooth internal).
+- Di dalam kode binary `rbp`, tidak ada antarmuka grafis untuk scanning Wi-Fi, pairing Bluetooth, atau status jaringan nirkabel.
 
-1. **Koordinat & Dimensi Strip Background**:
-   - **X**: `740` hingga `830` (lebar 90 piksel).
-   - **Y**: `6` hingga `44` (tinggi 38 piksel, terpusat vertikal pada Top Bar 50px).
-   - **Visual**: Rounded pill box (radius sudut 6px) dengan warna latar abu-abu gelap transparan (`#1b1e23` / ARGB `0xD01b1e23`), garis tepi halus (`#32373f`).
-2. **Ikon Wi-Fi**:
-   - Posisi: `x = 750..778`, `y = 13..37` (dimensi 24x24px).
-   - **Status Terhubung**: Putih terang (`#ffffff`) dengan busur sinyal menyala hijau/putih.
-   - **Status Terputus / Off**: Abu-abu redup (`#555a64`) dengan garis diagonal (strike-through).
-3. **Ikon Bluetooth**:
-   - Posisi: `x = 790..818`, `y = 13..37` (dimensi 24x24px).
-   - **Status Terhubung / Aktif**: Ikon Rune Bluetooth biru terang khas (`#0082fc`) atau putih terang.
-   - **Status Nonaktif**: Abu-abu redup (`#555a64`).
-4. **Interaksi Touch**:
-   - Area hit-test: `x: 735..835`, `y: 0..50`.
-   - Sentuhan (tap) pada area ini akan meng-toggle buka/tutup halaman overlay jaringan.
-   - Sentuhan langsung dikonsumsi (`return 1`), sehingga `rbp` di bawahnya tidak menerima klik liar.
+### B. Keunggulan Platform Amlogic S905X
+- Perangkat TV Box dan SBC Amlogic S905X yang menjalankan **Armbian aarch64** memiliki chip nirkabel terintegrasi (Wi-Fi 802.11 b/g/n/ac dan Bluetooth 4.x/5.x).
+- Pengguna membutuhkan kendali konektivitas nirkabel dan mod performance langsung dari layar sentuh konsol tanpa harus keluar ke shell terminal.
+- Solusi diimplementasikan melalui **DirectFB Framebuffer Interposer (`fbshim.so`)**:
+  1. **Top Header Bar Mod & Network Navigation** (`y: 8..44`): Menempatkan tombol navigasi mod dan indikator jaringan di baris atas layar, menjaga area tombol native **ZOOM, GRID, STATUS & BEAT FX** tetap bersih dan tidak terhalang.
+  2. **Card Theme Toggle di Layar SHORTCUT**: Menimpa kartu unpopulated **JOG LCD** (`x: 792..1259, y: 89..198`) dengan tombol toggle **THEME** (`[ DARK ]` dan `[ LIGHT ]`) yang selaras 100% dengan estetika native Pioneer.
+  3. **Halaman Overlay Jaringan OS (5 Tab)**: Modal dialog pada rentang `y: 50..579` untuk scanning Wi-Fi, info hotspot, status modul mod, dan restart stack player.
 
 ---
 
-### B. Halaman Overlay Pengaturan Jaringan (Network Settings Overlay)
-Berdasarkan referensi visual:
+## 2. Tata Letak Top Header Bar (`y: 8..44`)
+
+Pada layar utama (Waveform Performance View), area atas layar dialokasikan secara presisi:
+
 ```
-+--------------------------------------------------------------------------------------------------+
-| TOP BAR: STATUS / TITLE                              [ (•) Wi-Fi  * BT ]  00:00:00  [< INFO ]    |  y: 0..50
-+--------------------------------------------------------------------------------------------------+
-| ================================= NETWORK SETTINGS ========================================= [X] |  y: 50..110
-|                                                                                                  |
-|  [TAB: WI-FI]          [TAB: BLUETOOTH]         [TAB: HOTSPOT / AP]      [TAB: STATUS & IP]      |  y: 110..160
-| ------------------------------------------------------------------------------------------------ |
-|  Wi-Fi Radio: [ ON / OFF Toggle ]               Signal: 100%   IP: 192.168.137.22                |  y: 160..210
-|  Connected: NOVA_7F08 (WPA2)                   Gateway: 192.168.137.1                            |
-| ------------------------------------------------------------------------------------------------ |
-|  Available Networks (Daftar Wi-Fi):                             [ Refresh / Scan ]               |  y: 210..250
-|  +--------------------------------------------------------------------------------------------+  |
-|  | (*) NOVA_7F08                   [Connected]                    Signal: 100% [Lock] [Forget]|  |  y: 250..310
-|  | ( ) ALBADR                      [Available]                    Signal:  70% [Lock] [Connect|  |  y: 310..370
-|  | ( ) Studio_Guest                [Available]                    Signal:  55% [Lock] [Connect|  |  y: 370..430
-|  +--------------------------------------------------------------------------------------------+  |
-|                                                                                                  |
-|  Web Remote: http://unx.local:5800  atau  http://192.168.137.22:5800                             |  y: 650..700
-+--------------------------------------------------------------------------------------------------+
-| (( DECK 1 )) TIME: 00:00           BPM: 130.0   | (( DECK 2 )) REMAIN: 00:00         BPM: 130.0  |  y: 710..800
-+--------------------------------------------------------------------------------------------------+
++──────────────────────────────────────────────────────────────────────────────────────────────────────────+
+| TRACK TITLE / ARTIST        | KEY | STEMS | RMX | MODS | [ (•) Wi-Fi  * BT ] | 00:00:00 [< INFO ]        |  y: 0..50
++──────────────────────────────────────────────────────────────────────────────────────────────────────────+
 ```
 
-1. **Rentang Layar Overlay**:
-   - `x`: `0` hingga `1280`.
-   - `y`: `50` hingga `710` (tinggi 660px).
-   - Area Deck Bawah (`y = 710..800`) dibiarkan tetap terlihat agar DJ tetap memantau status deck saat mengatur koneksi.
-2. **Komponen Halaman**:
-   - **Header Bar**:
-     - Judul: "NETWORK SETTINGS" (warna aksen cyan `#00a2ff`).
-     - Tombol Tutup `[ X ]` di pojok kanan atas (`x: 1210..1265, y: 58..102`).
-   - **Tab Kategori**:
-     - `Wi-Fi`: Pemindaian SSID, koneksi password, status link.
-     - `Bluetooth`: Scanning perangkat, pairing controller / wireless audio.
-     - `Hotspot / AP`: Mengaktifkan mode hotspot independen jika tidak ada router eksternal.
-     - `System / IP`: Ringkasan antarmuka `eth0`, `wlan0`, status WebVNC server.
-   - **Proteksi Sentuh (Touch Fence)**:
-     - Selama overlay aktif, seluruh sentuhan pada rentang `y: 50..710` ditangkap oleh handler shims dan tidak dibocorkan ke `rbp`.
+### Koordinat & Fungsi Tombol:
+1. **`KEY` Button** (`x: 580..655, y: 8..44`):
+   - Menampilkan label teks putih tajam dengan divider garis tipis.
+   - Tap memicu pemilihan pad row Harmonic Mixing / Keyshift pada `librx3_core.so`.
+2. **`STEMS` Button** (`x: 665..750, y: 8..44`):
+   - Tap memicu pemilihan pad row Stems separation (Vocal, Drums, Inst).
+3. **`RMX` Button** (`x: 760..835, y: 8..44`):
+   - Tap mengaktifkan panel atau mode RMX-1000 Roll.
+4. **`MODS` / `FX MOD` Button** (`x: 845..925, y: 8..44`):
+   - Tap membuka langsung Tab 3 (MOD MENU) pada overlay dialog.
+5. **Wi-Fi & Bluetooth Strip** (`x: 939..1066, y: 8..44`):
+   - Menampilkan glif anti-aliased Wi-Fi (28×22) dan Bluetooth (16×24).
+   - **Tanpa background box biru**: Mengikuti warna dasar top bar native secara transparan.
+   - Sentuhan memberikan umpan balik warna cyan/biru elektrik sesaat pada ikon (`COL_ACCENT_HOV`).
+   - Otomatis disembunyikan saat menu geser atas (Swipe-Down Menu) aktif, mencegah tumpang-tindih dengan tombol `MENU`.
 
 ---
 
-## 3. Arsitektur Teknis Implementasi
+## 3. Card Theme Toggle pada Layar SHORTCUT (`browse_mode == 10`)
 
-```mermaid
-flowchart TD
-    subgraph DirectFB / Framebuffer Pipeline
-        VSYNC[VSync FBIOPAN_DISPLAY in fb_shim.c] --> DRAW[menu_draw.c]
-        DRAW --> NET_DRAW[net_overlay_draw: Top Bar Strip & Overlay Panel]
-        NET_DRAW --> FB[Shadow Buffer /dev/fb0]
-    end
+Pada hardware XDJ-RX3, kartu kanan atas layar SHORTCUT menampilkan pengaturan **JOG LCD** yang tidak digunakan saat menggunakan kontroler USB. Kartu ini ditimpa secara mulus di memori framebuffer oleh `ui_overlay.c`:
 
-    subgraph Touch Event Pipeline
-        TOUCH[Pointsrc / Evdev Touch Handler] --> NET_TOUCH{net_overlay_touch?}
-        NET_TOUCH -- Yes (Consumed) --> ACTION[Toggle Open / Change Tab / Connect Wi-Fi]
-        NET_TOUCH -- No (Bypass) --> RBP_TOUCH[Forward to Pioneer rbp GUI]
-    end
+### Koordinat & Tampilan Visual:
+* **Area Kartu:** `x: 792..1259`, `y: 89..198` (lebar 468px, tinggi 110px).
+* **Top Accent Bar:** Garis aksen amber/emas (`y: 89..91`, RGB `#633010`).
+* **Latar Belakang & Border:** Background abu-abu gelap `#212021` dan garis tepi `#393c39`.
+* **Judul:** Teks `THEME` di koordinat `x: 812, y: 108` warna abu-abu `#949694`.
+* **Garis Pembatas:** Horizontal divider di `y: 138`.
+* **Tombol Segmented (`y: 144..190`):**
+  - **`[ DARK ]`** (`x: 812..1015`)
+  - **`[ LIGHT ]`** (`x: 1035..1238`)
+* **Styling State:**
+  - Mode Aktif: Border menyala cyan `#00a0ff`, background biru gelap `#082839` (atau putih terang), dan teks putih tebal.
+  - Mode Inaktif: Background `#181818`, border `#393c39`, teks abu-abu redup `#949694`.
+* **Interaksi Sentuh:**
+  - Tap pada `[ DARK ]`: Jika sedang dalam mode terang, otomatis memicu toggle kembali ke dark mode.
+  - Tap pada `[ LIGHT ]`: Jika sedang dalam mode gelap, memicu sekuens key native `SHIFT + SHORTCUT` untuk mengaktifkan tema putih terang (`theme-white`).
 
-    subgraph Backend Network Daemon
-        ACTION --> SOCK[/tmp/net_cmd.sock]
-        SOCK --> NET_SVC[net_daemon.py / background thread]
-        NET_SVC --> NMCLI[nmcli / rfkill / ip]
-        NMCLI --> STATE[/tmp/net_state.json cache]
-        STATE --> NET_DRAW
-    end
+---
+
+## 4. Modal Overlay Jaringan OS (Rentang `y: 50..579`)
+
+Ketika strip Wi-Fi / Bluetooth atau tombol `MODS` ditekan, modal overlay terbuka pada area tengah layar (`y: 50..579`), membiarkan waveform dan deck area (`y > 580`) tetap aktif:
+
+### Struktur Tab:
+* **Tab 0 — WI-FI:** Status koneksi SSID, IP address wlan0, tombol Scan jaringan, dan daftar access point yang dapat dipilih langsung.
+* **Tab 1 — BLUETOOTH:** Toggle on/off modul Bluetooth, status adapter, dan scanning perangkat audio.
+* **Tab 2 — HOTSPOT (AP):** Konfigurasi Wi-Fi Access Point mandiri (`XDJ-RX3-DIRECT`) untuk koneksi Rekordbox iPad atau remote control tanpa router eksternal.
+* **Tab 3 — MOD MENU:** Status ringkasan modul performa (`core`, `stems`, `theme-white`, `keyshift`, `beatjump`, `now-playing`) serta tombol **RESTART RBP** yang terintegrasi langsung dengan perintah `systemctl restart rblive4`.
+* **Tab 4 — STATUS / IP:** Rangkuman konfigurasi jaringan (wlan0 IP, eth0 IP, hostname, link rate).
+
+---
+
+## 5. Alur Data & Eksekusi
+
 ```
-
-### A. Modul C di `scripts/shims/`:
-1. **`net_overlay.h` & `net_overlay.c`**:
-   - Mengelola state overlay (`g_net_overlay_open`, tab aktif, daftar Wi-Fi cache).
-   - Menggambar strip tombol Top Bar (Wi-Fi + BT pill).
-   - Menggambar panel overlay halaman penuh dengan antarmuka teks/kotak.
-   - Menangani hit-test koordinat touch sentuh (tombol strip, tab, tombol refresh, tombol connect, tombol close).
-2. **`net_icons.h`**:
-   - Data bitmap ikon 24x24 untuk Wi-Fi (gelombang sinyal 100%, 75%, 50%, disconnected) dan Bluetooth (logo rune).
-3. **`ui_overlay.c` / `menu_draw.c`**:
-   - Memanggil `net_overlay_draw(&fv)` pada setiap render frame vsync.
-4. **`pointsrc.c`**:
-   - Mengarahkan touch event pertama ke `net_overlay_touch(down, x, y)`.
-
-### B. Modul Backend Helper (Asynchronous Non-blocking):
-- **Masalah**: Render thread DirectFB berjalan pada 30–60 FPS. Menjalankan perintah shell (`nmcli dev wifi list`) secara synchronous di dalam render loop akan menyebabkan frame drop / stutter 1-2 detik.
-- **Solusi**:
-  - Worker thread ringan atau script daemon background (`/opt/rblive4/scripts/net_daemon.py`):
-    - Melakukan polling periodik setiap 2–3 detik untuk memeriksa status IP, SSID aktif, dan signal dBm.
-    - Menulis data hasil scan ke shared memory atau file status ringkas `/tmp/net_state.json`.
-    - Shims C di `net_overlay.c` membaca data yang sudah dicache di memori, sehingga render tetap 60 FPS tanpa jeda (0 ms blocking).
-
----
-
-## 4. Tahapan Kerja (Roadmap Implementasi)
-
-| Tahap | Aktivitas | Target Luaran |
-|---|---|---|
-| **Fase 1** | **Pembuatan Asset Ikon & Top Bar Strip** | - Membuat `net_icons.h` (bitmap icon Wi-Fi & BT 24x24).<br>- Menambahkan fungsi gambar strip pill di `net_overlay.c`.<br>- Tes render strip pada Top Bar di posisi `x: 740..830, y: 6..44`. |
-| **Fase 2** | **Interaksi Touch Tombol Strip & Toggle Layar** | - Menambahkan hit-test tap pada area strip di `pointsrc.c`.<br>- State toggle buka/tutup overlay.<br>- Blokir klik ke `rbp` saat overlay terbuka. |
-| **Fase 3** | **Render Halaman Overlay "PENGATURAN JARINGAN"** | - Menggambar background panel gelap `y = 50..710`.<br>- Header title dan tombol Close `[X]`.<br>- Tab bar: Wi-Fi, Bluetooth, Info IP & WebVNC.<br>- Verifikasi visual di layar VNC http://unx.local:5800/. |
-| **Fase 4** | **Integrasi Backend Network (nmcli & rfkill)** | - Integrasi pembacaan status jaringan nyata dari Linux Armbian S905X (`wlan0`, SSID aktif, IP).<br>- Daftar SSID hasil scan interaktif.<br>- Toggle radio Wi-Fi & Bluetooth. |
-| **Fase 5** | **Pengujian & Finalisasi** | - Verifikasi koneksi Wi-Fi tanpa stuttering pada audio/waveform.<br>- Commit & dokumentasi lengkap. |
-
----
-
-## 5. Keputusan Desain & Keamanan Sistem
-
-1. **Non-Intrusive**: Tidak memodifikasi binary `/root/pdj/rbp` milik Pioneer, seluruh visual overlay dan tombol dibuat di layer interposer `fbshim.so`.
-2. **Deck Area Protection**: Area bawah deck (`y = 710..800`) tetap aktif dan terlihat, sehingga indikator playback lagu tetap termonitor.
-3. **Zero Stuttering**: Semua operasi jaringan berat dieksekusi di background thread agar latensi audio ALSA dan rendering DirectFB tetap rock-solid.
+Sentuhan Jari (Touchscreen)
+     │
+     ▼
+evdev (/dev/input/event*)
+     │
+     ▼
+fbshim.so (net_zone.c / ui_overlay.c)
+     │
+     ├── Jika touch pada Top Header (KEY / STEMS):
+     │   └─► tscfake_emit() mensimulasikan tap koordinat pad row
+     │
+     ├── Jika touch pada Top Header (MODS):
+     │   └─► net_open(NET_TAB_MODS) membuka modal Mod Menu
+     │
+     ├── Jika touch pada Top Strip (Wi-Fi/BT):
+     │   └─► net_open(NET_TAB_WIFI) membuka modal pengaturan jaringan
+     │
+     ├── Jika touch pada SHORTCUT Theme Card:
+     │   └─► ov_theme_toggle() mengirim event SHIFT+SHORTCUT ke engine tema
+     │
+     └── Jika touch pada area kontrol native lainnya:
+         └─► Dilewatkan 100% tanpa modifikasi ke rbp
+```

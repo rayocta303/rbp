@@ -1,82 +1,65 @@
-# Notice, copyright and legal
+# Notice, Copyright and Legal — RBP-Amlogic-S905X
 
-**XDJ-RX3 Standalone Engine** is an independent interoperability and preservation project.
-It is **not affiliated with, endorsed by, or sponsored by** Pioneer DJ, AlphaTheta Corporation,
-Amlogic, Inc., Raspberry Pi Ltd, Denon DJ, inMusic Brands, or any of their subsidiaries.
+**RBP-Amlogic-S905X** is an independent interoperability, hardware-enablement, and digital preservation project.
+It is **not affiliated with, endorsed by, or sponsored by** Pioneer DJ, AlphaTheta Corporation, Amlogic, Inc., Raspberry Pi Ltd, Denon DJ, inMusic Brands, or any of their subsidiaries.
 
-The goal is to run the standalone Pioneer DJ XDJ-RX3 rekordbox player (`rbp`, called `rb`
-internally) on **Amlogic S905X-series TV Boxes/SBCs** (running Armbian aarch64) and the
-**Raspberry Pi 4B**, using a soft-float-chroot + userland shim approach. The project is an
-extended standalone port developed from **[salesforcedoc/rbpi4b](https://github.com/salesforcedoc/rbpi4b)**
-(by `@i.erhan.es`), which in turn built upon the earlier Denon DJ **Prime GO** and **SC Live 4** (`JP21`)
-research.
+The primary mission of this project is running the standalone Pioneer DJ XDJ-RX3 rekordbox player (`rbp`, internally called `rb`) on low-cost **Amlogic S905X-series TV Boxes and Single Board Computers (SBCs)** running **Armbian aarch64** (Linux 5.15+), utilizing the kernel's native **32-bit EL0 Support** (`CONFIG_COMPAT`), a soft-float ARM32 chroot, and userland hardware translation shims.
+
+---
+
+## Provenance and Credits
+
+This project is an independent standalone repository and is **not a fork** of upstream, but proudly credits and builds upon the foundational research and open-source contributions of the following authors and projects:
+
+1. **Base Shims & rbpi4b Architecture:**
+   - **Repository:** [https://github.com/salesforcedoc/rbpi4b](https://github.com/salesforcedoc/rbpi4b)
+   - **Author:** `@salesforcedoc` / `@i.erhan.es` ([Instagram](https://instagram.com/i.erhan.es))
+   - *Credit:* Provided the original proof-of-concept userland shims (`knobshim`, `fbshim`, `audioshim`, `crashcatch`), DirectFB 1.4 fbdev patches, and ALSA / fake tsc2007 touch translation pipeline.
+
+2. **XDJ-RX3 Mod Suite & Enhancements:**
+   - **Creator:** `@dj_ventotto` ([Instagram: @dj_ventotto](https://www.instagram.com/dj_ventotto/))
+   - *Credit:* Provided the advanced runtime performance mods for XDJ-RX3 (`librx3_core.so`, Stems separation, Keyshift & Key-Match, White Bright Theme, Custom BeatJump, Latin Search, Asshole Mode, and custom pad engines).
+
+3. **Prior Reverse Engineering and Interoperability Efforts:**
+   - **PrimeBox:** XDJ-RX3 on Rockchip RK3288 (Prime GO) — original `patch-rbp` and DirectFB display adaptation.
+   - **rb2go:** XDJ-RX3 on postmarketOS aarch64 mobile devices — window-mode and input discovery.
+   - **chromebit:** XDJ-RX3 on ASUS Chromebit (RK3288) — mainline Linux graphics validation.
+   - **freelive4:** Root access methodology and architecture documentation.
+
+---
 
 ## What this repository contains
 
-* Original shell scripts, C sources, shims (`knobshim.so`, `fbshim.so`, `audioshim.so`, `netshim.so`, `crashcatch.so`), diagnostic tools, and technical documentation written for this project. These are licensed MIT (see `LICENSE`).
-* Device-survey and hardware architectural specifications for Amlogic S905X (Meson GXL) and Raspberry Pi 4B (BCM2711).
-* Control surface mappings for the 4-channel **Pioneer DDJ-FLX6** (`map_flx6.c`), 2-channel **DDJ-FLX4** (`map_flx4.c`), Denon JP21 (`map_jp21.c`), and evdev keyboard fallback (`map_kbd.c`).
-* Interoperability patch instructions for the `rbp` binary, DirectFB 1.4 multi-plane DRM integration, and Pro DJ Link networking stack.
+* Original and adapted C sources, shims (`fbshim.so`, `knobshim.so`, `audioshim.so`, `netshim.so`, `crashcatch.so`), shell scripts, and systemd units specifically tuned for Amlogic S905X TV boxes.
+* Native DirectFB 1.4 multi-plane DRM / fbdev integration and zero-copy VNC video streaming.
+* Control surface mappings for 4-channel **Pioneer DDJ-FLX6** (`map_flx6.c`) and 2-channel **DDJ-FLX4** (`map_flx4.c`).
+* Native RBP UI overlays: Top-bar mod quick-select buttons (`KEY`, `STEMS`, `RMX`, `MODS`), anti-aliased Wi-Fi / Bluetooth status indicator, and in-place SHORTCUT Dark/Light Theme toggle card.
+* Technical architecture documentation, data dictionaries, and bring-up manuals for Amlogic S905X SBCs and TV boxes.
 
-## What this repository does **not** contain
+## What this repository does NOT contain
 
-* No XDJ-RX3/CDJ firmware (`.UPD`), no decrypted firmware ISO, no `rootfs`, no
-  `rbp`/`rb` executable, and no other Pioneer/AlphaTheta binaries.
-* No Denon DJ / Engine OS files or binaries.
-* No Armbian OS or Raspberry Pi OS images, bootloaders, or proprietary blobs.
-* No rekordbox music, playlists, analysis files, or proprietary databases.
-* No firmware decryption keys of any kind, and no firmware acquisition or
-  decryption tooling — those are out of scope here and handled by related
-  projects.
+* **No proprietary Pioneer DJ or AlphaTheta firmware binaries**, no `.UPD` files, no decrypted ISOs, no `rootfs`, and no `rbp` executable.
+* **No firmware decryption keys**, bypass tools, or extraction scripts.
+* **No copyrighted audio files, rekordbox databases, analysis files, or playlists.**
+* **No proprietary OS distribution images or bootloader blobs.**
 
-You must own/obtain the hardware and the extracted firmware assets yourself.
-The scripts here operate strictly on files **you** supply.
+You must own the relevant hardware and provide your own legally obtained and extracted firmware assets. All scripts in this repository operate strictly on files supplied by the user.
 
-## Provenance and related work this project builds on
+---
 
-* **[salesforcedoc/rbpi4b](https://github.com/salesforcedoc/rbpi4b)** by `@i.erhan.es` — the initial Raspberry Pi 4B port baseline.
-* The **PrimeBox** XDJ-RX3 → Prime GO (RK3288) port — the source of the `rbp`
-  patcher (`patch-rbp`), the patched DirectFB fbdev driver, and shared shim sources.
-* The **rb2go** XDJ-RX3 → postmarketOS phone (aarch64) port — window-mode,
-  input, and USB-emulation notes.
-* The **chromebit** XDJ-RX3 → ASUS Chromebit (RK3288, postmarketOS) port — a
-  clean Linux RK3288 reference.
-* **freelive4** — root access methodology on Denon OS hardware.
+## Legal Caveats
 
-## Legal caveats
+* This software is intended strictly for educational, scientific research, hardware repair, personal interoperability, and digital preservation purposes.
+* Executing vendor software on non-vendor hardware may be subject to software licensing terms and regional copyright exceptions (such as reverse engineering for interoperability). Users are solely responsible for ensuring compliance with local laws.
+* Modifying firmware, flashing custom bootloaders, or running experimental software on commercial hardware carries inherent risks. The authors and contributors assume no liability for damaged hardware, data loss, or voided warranties.
 
-* Firmware acquisition and decryption are **not** part of this project; they
-  may be restricted in your jurisdiction. Check your local law before using any
-  external extraction tools.
-* Patching and running a vendor application on third-party hardware may violate
-  the vendor's EULA. This project is offered for research, repair,
-  preservation, and personal interoperability only.
-* Installing this on your device can brick it or void its warranty. **You do
-  everything at your own risk.**
+---
 
 ## Trademarks
 
-*Pioneer DJ*, *AlphaTheta*, *rekordbox*, *XDJ-RX3*, *CDJ*, *DDJ-FLX4*, *DDJ-FLX6*, and related marks
-are trademarks of AlphaTheta Corporation. *Amlogic* is a trademark of Amlogic, Inc.
-*Raspberry Pi* and *Raspberry Pi OS* are trademarks of Raspberry Pi Ltd.
-*Denon DJ*, *SC Live 4*, *Engine OS*, and *Prime GO* are trademarks of inMusic Brands, Inc.
-*Armbian* is a trademark of the Armbian project. All trademarks are used here in a descriptive,
-nominative sense only.
-
-## Third-party components
-
-| Component | License | Used for |
-|---|---|---|
-| DirectFB 1.4 | LGPL-2.1 | display stack (patched fbdev driver) |
-| JUCE | GPL / commercial | audio + UI framework inside `rbp` |
-| ALSA / alsa-lib | LGPL | audio |
-| glibc 2.13 (RX3 rootfs) | LGPL | soft-float runtime |
-| BusyBox | GPL-2.0 | runtime shell |
-
-Raspberry Pi OS is the host system this project targets, not a component it
-ships or links against, and no part of it is redistributed here. Staying on the
-fbdev path — rather than moving to DirectFB's DRM/KMS system — is deliberate
-partly because it introduces **no new third-party code**: the display path is
-the same patched fbdev driver, presenting to a different framebuffer.
-
-See each project for the full license text.
+*Pioneer DJ*, *AlphaTheta*, *rekordbox*, *XDJ-RX3*, *DDJ-FLX6*, *DDJ-FLX4*, *CDJ*, and associated logos are registered trademarks of AlphaTheta Corporation.  
+*Amlogic* is a registered trademark of Amlogic, Inc.  
+*Raspberry Pi* is a trademark of Raspberry Pi Ltd.  
+*Denon DJ*, *Engine OS*, and *Prime GO* are trademarks of inMusic Brands, Inc.  
+*Armbian* is a trademark of the Armbian Project.  
+All brand names, trademarks, and registered trademarks cited in this documentation are used strictly for identification and nominative reference purposes only.

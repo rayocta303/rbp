@@ -1,18 +1,15 @@
 # work/
 
-Local scratch space, **gitignored** except for this file.
+Local build scratch directory for **RBP-Amlogic-S905X**, **gitignored** except for this file.
 
-Put anything here that is generated locally and must never be committed:
+Use this directory to stage intermediate artifacts, builds, and source trees that should never be committed into the repository:
 
-* `dfb-src/` — the pristine DirectFB 1.4.16 git tree the diff is applied to
-* `flux-src/` — the `flux` package, whose `fluxcomp` IDL compiler a git build of
-  DirectFB needs (see [`tools/build-directfb`](../tools/build-directfb/README.md))
-* `dfb/` — the DirectFB 1.4.16 install staged by
-  [`tools/build-directfb`](../tools/build-directfb/README.md)
-* `rbx3-run.tgz` — the chroot built by
-  [`scripts/build-chroot.sh`](../scripts/build-chroot.sh)
-* extracted firmware trees, patched players, device captures, build logs, …
+* `dfb-src/` — Pristine DirectFB 1.4.16 git tree used for applying `directfb-full.diff`.
+* `flux-src/` — The `flux` package containing the `fluxcomp` IDL compiler required by DirectFB.
+* `dfb/` — Staged DirectFB 1.4.16 soft-float installation output.
+* `rbx3-s905x.tgz` — The compiled chroot bundle assembled by `scripts/build-chroot.sh`.
+* Extracted XDJ-RX3 firmware directories (`XDJRX3-rootfs/`).
+* Local device frame dumps (`.raw`, `.png`), core dumps, and profiling logs.
 
-No vendor firmware, decryption keys, `rbp`/`rb` binary or Engine OS file
-belongs in the repository. `.gitignore` keeps this directory out, but keep the
-release tree itself clean too.
+> [!CAUTION]
+> Never place decrypted vendor firmware ISOs, decryption keys, or proprietary `rbp` binaries into public or tracked locations. Keep your workspace clean and secure.

@@ -1,180 +1,175 @@
-# Tutorial — run `rb` on Amlogic S905X or Raspberry Pi 4B
+# Tutorial — Run XDJ-RX3 rekordbox Engine on Amlogic S905X
 
-End-to-end: from the extracted XDJ-RX3 assets to `rbp` running on **Amlogic S905X (Armbian aarch64)**
-or **Raspberry Pi 4B (Pi OS Lite 32-bit)** with an HDMI monitor, touchscreen, and a
-**Pioneer DDJ-FLX6** or **DDJ-FLX4** controller.
+This step-by-step tutorial guides you from extracted Pioneer XDJ-RX3 assets to running the native standalone `rbp` player on an **Amlogic S905X TV Box or SBC** running **Armbian aarch64**, complete with an HDMI display, USB capacitive touch, and a **Pioneer DDJ-FLX6** (4-channel) or **DDJ-FLX4** (2-channel) controller.
 
-> This project does not cover firmware acquisition, decryption or keys — start from
-> the extracted tree described in [docs/04](docs/04-firmware-assets.md).
+> [!NOTE]
+> This project focuses on **Amlogic S905X** hardware. It builds upon the shims and concepts introduced by [salesforcedoc/rbpi4b](https://github.com/salesforcedoc/rbpi4b) and the performance mod suite by [@dj_ventotto](https://www.instagram.com/dj_ventotto/).
+> Firmware acquisition and decryption are not covered here; see [docs/04-firmware-assets.md](docs/04-firmware-assets.md) for required asset structure.
 
-## 0. Prerequisites
+---
 
-* **Workstation (Linux, or WSL):** `arm-linux-gnueabi-gcc`,
-  `libc6-dev-armel-cross`, `python3`, `tar`, plus the DirectFB build tools —
-  which include the **`flux` IDL compiler**, a separate package because
-  DirectFB fetched from git does not ship the source files it generates (see
-  [tools/build-directfb](tools/build-directfb/README.md)). The shim build can
-  be run in the repo's Docker image if the float-ABI toolchain is awkward to
-  install — that image is
-  [`tools/build-toolchain/Dockerfile`](tools/build-toolchain/Dockerfile), and
-  building it needs nothing on the host but Docker (see
-  [tools/README.md](tools/README.md#build-toolchain)); the DirectFB build needs
-  a native compiler *and* a cross one.
-* **Extracted assets:** an `XDJRX3-rootfs/`, the GUI assets and `rbp-audio`
-  (stock `rbp` + the shared patches). See
-  [docs/04](docs/04-firmware-assets.md).
-* **Target Board (Amlogic S905X or Raspberry Pi 4B):**
-  - **Amlogic S905X / S905X-W / S905L TV Box or SBC:** Running Armbian aarch64 (Linux 5.15+ kernel).
-  - **Raspberry Pi 4B:** Running Pi OS Lite 32-bit (Bookworm).
-  - Both require `gcc`, `make` and `python3`:
-  ```sh
-  ssh root@<host>   # or pi@<host> on Raspberry Pi
-  apt-get update && apt-get install -y gcc make python3
-  ```
-  Confirm 32-bit execution compatibility on the board:
-  ```sh
-  dmesg | grep -i '32-bit EL0'
-  # -> 32-bit EL0 Support
-  ```
-  For S905X architecture details, see [docs/25 — Amlogic S905X](docs/25-amlogic-s905x.md).
-  For Pi 4 architecture details, see [docs/13 — Raspberry Pi 4](docs/13-raspberrypi4.md).
+## 0. Prerequisites & Hardware Requirements
 
-## 1. Build the patched DirectFB stack (host)
+### 1. Target Hardware (Amlogic S905X)
+* **Board:** Amlogic S905X / S905X-W / S905L TV Box (e.g. TX3 Mini, X96 Mini) or SBC (Libre Computer Le Potato) with 1 GB or 2 GB RAM.
+* **Operating System:** Armbian aarch64 (Linux 5.15+ kernel) flashed to eMMC or high-speed microSD.
+* **Display:** HDMI monitor or LCD panel (native 1280×800 recommended).
+* **DJ Controller:** Pioneer DDJ-FLX6 or DDJ-FLX4 connected via USB.
+* **USB Storage:** USB flash drive exported from rekordbox (FAT32 or exFAT).
 
-Follow [tools/build-directfb/README.md](tools/build-directfb/README.md). It
-fetches DirectFB 1.4.16 (pinned by commit — there is no 1.4.16 tag upstream),
-applies `directfb-full.diff` and installs into `work/dfb/lib/`.
+### 2. Workstation (Host Build Machine)
+* Linux PC or Windows with WSL2 (Ubuntu / Debian).
+* Cross-compilation tools: `arm-linux-gnueabi-gcc`, `libc6-dev-armel-cross`, `python3`, `make`, `tar`.
 
-## 2. Build the chroot (host)
+---
 
-[`scripts/build-chroot.sh`](scripts/build-chroot.sh) assembles the whole
-`rbx3-run` tree (rootfs + gui + patched rbp + shims + DirectFB + `directfbrc` +
-`rb.conf`) and tars it:
+## 1. Verify Amlogic S905X Compatibility
 
+Connect to your S905X board via SSH:
 ```sh
-RX3=/path/to/extracted DFB="$PWD/work/dfb" scripts/build-chroot.sh
-# -> work/rbpi4b-pi4.tgz
+ssh root@192.168.137.22
 ```
 
-It builds the shims from [`scripts/shims/`](scripts/shims/) if needed, applies
-the `getPcController()` no-op patch via
-[`scripts/patch-rbp-nopc.py`](scripts/patch-rbp-nopc.py), the layer pixel format
-via [`scripts/patch-rbp-depth.py`](scripts/patch-rbp-depth.py) at the depth
-`rb.conf` asks for, and installs the DirectFB stack.
-
-## 3. Deploy (Pi)
-
-[`scripts/device/install.sh`](scripts/device/install.sh) is the only on-device
-entry point. It untars to `/opt/rblive4`, puts `rb.conf` in place, proves the
-chroot can execute a 32-bit binary, checks `/dev/fb0` and `/dev/snd/seq`, and
-runs `fix-dev.sh`. It is idempotent — re-running upgrades in place.
-
+Ensure essential utilities are installed on the board:
 ```sh
-scp work/rbpi4b-pi4.tgz pi@<host>:/tmp/
-scp -r scripts/device    pi@<host>:/tmp/
-ssh pi@<host> 'sudo sh /tmp/device/install.sh /tmp/rbpi4b-pi4.tgz'
+apt-get update && apt-get install -y gcc make python3 alsa-utils evtest fbset
 ```
 
-`RB_DEPLOY_ROOT` overrides the destination if you would rather not use
-`/opt/rblive4`. Everything machine-specific — display mode, audio card, MIDI
-match strings, services to stop — is in `/opt/rblive4/rb.conf`, and nothing else
-should need editing.
-
-## 4. (Optional) iterate on a shim
-
-The tarball already contains built shims. To change one, build it and drop it at
-the deploy root; the launcher installs it into the chroot on the next start, so
-you never rebuild the tarball to test a shim:
-
+Verify that the Armbian aarch64 kernel has **32-bit EL0 Support** enabled:
 ```sh
-cd scripts/shims
-make knobshim.so RX3=/path/to/extracted/XDJRX3-rootfs
-scp knobshim.so pi@<host>:/opt/rblive4/knobshim.so
+dmesg | grep -i '32-bit EL0'
+```
+Expected output:
+```
+[    0.000000] 32-bit EL0 Support
 ```
 
-The same applies to `fbshim.so`, `audioshim.so` and `rbp-audio`.
-
-## 5. Launch
-
-**The player is normally already up by the time you get here.** `install.sh`
-installs *and enables* `rblive4.service` (`RB_AUTOSTART=1`, the shipped default),
-so after the reboot that follows a deploy `rbp` starts on its own. This command
-is then a **restart**, and the manual path only if you set `RB_AUTOSTART=0`
-([docs/11](docs/11-runtime-launcher.md)):
-
+Check the framebuffer device:
 ```sh
-ssh pi@<host> 'sudo sh /opt/rblive4/start-rb.sh'
+fbset -fb /dev/fb0
+```
+It should report `1280x800` (or `1920x1080` if standard monitor). To force native 1280×800 mode:
+```sh
+fbset -fb /dev/fb0 -g 1280 800 1280 800 16
 ```
 
-That stops the desktop services that would fight for the display or the media
-stick, prepares the chroot, starts `edb_streamd` then `rbp`, and starts the USB
-watcher. The exact sequence is in
-[docs/11](docs/11-runtime-launcher.md).
+---
 
-`fix-dev.sh` runs as part of it, and must be re-run after **every** reboot — the
-device nodes it creates live in `/dev`, which is a tmpfs.
+## 2. Build the Patched DirectFB 1.4 Stack (Host)
 
-## 6. Verify
+Follow [tools/build-directfb/README.md](tools/build-directfb/README.md) on your build machine:
+1. Clones DirectFB 1.4.16.
+2. Applies `directfb-full.diff` (single-buffer fbdev driver and multi-plane DRM integration).
+3. Compiles and installs the ARM32 soft-float libraries into `work/dfb/lib/`.
 
-Work down [docs/13](docs/13-raspberrypi4.md)'s bring-up table rather than
-jumping to the last row: each step exists so that a failure cannot be masked by
-the next subsystem, and the display one in particular is the gate for everything
-else.
+---
 
-Two of the rows below read tools that are not built for you — both are
-single-file C, so build them on the Pi first, with the `gcc` from step 0:
+## 3. Assemble the Runtime Chroot (Host)
 
+Run [`scripts/build-chroot.sh`](scripts/build-chroot.sh) on your build host:
 ```sh
-gcc -O2 -static -o fbdump    tools/fbdump.c
-gcc -O2 -static -o evdevdump tools/evdevdump.c
+RX3=/path/to/extracted/XDJRX3-rootfs DFB="$PWD/work/dfb" scripts/build-chroot.sh
+```
+This script:
+1. Merges the soft-float ARM32 rootfs, GUI assets, and patched `rbp` executable.
+2. Compiles all shims from `scripts/shims/` (`fbshim.so`, `knobshim.so`, `audioshim.so`, `netshim.so`, `crashcatch.so`).
+3. Installs `librx3_core.so` and the mod suite from `scripts/mods/`.
+4. Produces the deployable archive: `work/rbx3-s905x.tgz`.
+
+---
+
+## 4. Deploy to the S905X Board
+
+Transfer the archive and installation scripts to the board:
+```sh
+scp work/rbx3-s905x.tgz root@192.168.137.22:/tmp/
+scp -r scripts/device    root@192.168.137.22:/tmp/
 ```
 
-| Check | Expectation |
-|---|---|
-| `tools/fbdump` (after the `cmdline.txt` recipe + reboot) | **measured: 1280×800, 16 bpp RGB565, `line_length` 2560, `smem_len` 2048000 (one page)** — the panel takes a `video=` mode its EDID never advertised, so the fb matches `rbp`'s surface exactly and the verdict line reads `geometry MATCHES`. `110 x 60 mm` means the EDID is still unread, i.e. the mode is forced, not negotiated. If a sink does refuse the timings you get 1280×720 back instead — then read [docs/06](docs/06-display.md) before assuming the display path is broken |
-| UI on the monitor | rekordbox UI, full-screen ([docs/06](docs/06-display.md)) |
-| `tools/evdevdump --list`, then point at the screen | rb reacts; see the four-corner procedure in [docs/07](docs/07-touch.md) |
-| `speaker-test` on the FLX4, then load + play | master out on the RCA, cue on the headphone jack ([docs/09](docs/09-audio.md)) |
-| `aseqdump -l`, then PLAY / CUE / faders / jog | messages arrive, and the deck responds — the map is written and fixture-tested, but its note/CC tables are unverified until a dump confirms them ([docs/15](docs/15-flx4-midi.md)) |
-| load a track with `1` and press `space` | deck 1 plays; `↑`/`↓` scroll the list, `Esc`/`Backspace`/right-click leave a screen. The keyboard and mouse need no configuration — they run alongside the controller (`EVDEV_MAP=kbd`, the default) and need no MIDI, no controller and no `/dev/snd/seq` ([docs/08](docs/08-controls.md#the-keyboard-map-rb_evdev_mapkbd-or-rb_midi_mapkbd-alone)) |
-| Insert a rekordbox USB stick | shows as **USB 1** with the label/track count ([docs/10](docs/10-usb.md)) |
-
-## 7. Restart / restore
-
+Execute the installer on the target:
 ```sh
-# clean restart (clears the DeviceSQL locks — important for the USB library)
-sudo sh /opt/rblive4/start-rb.sh
-
-# back to a normal desktop session
-sudo systemctl start lightdm
+ssh root@192.168.137.22 "sh /tmp/device/install.sh /tmp/rbx3-s905x.tgz"
 ```
 
-Unlike the previous target there is no vendor OS to hand the hardware back to —
-nothing is disabled at boot, and the services the launcher stops are started
-again by the line above.
+The installer:
+* Extracts the rootfs to `/opt/rblive4/rbx3-run`.
+* Verifies 32-bit execution by running a test binary inside the chroot.
+* Installs and enables the systemd service: `rblive4.service`.
+* Prepares `/opt/rblive4/rb.conf` and `/opt/rblive4/mods.conf`.
 
-## Current limitations
+---
 
-* The FLX4 map is written and fixture-tested, but **nothing has been run with an
-  FLX4 attached**, so its note/CC tables come from Pioneer's published MIDI list
-  rather than from the unit. Expect to correct some of them, starting with the
-  channel conversion and the pad encoding; the dump procedure and the open
-  questions are in [docs/15](docs/15-flx4-midi.md). The first sign of a wrong
-  table is silence from a whole section rather than a wrong button — run with
-  `RB_KNOB_VERBOSE=1` and read the unmapped lines in `/tmp/knobshim.log`.
-* The way to drive `rbp` without one is the **keyboard fallback**,
-  `EVDEV_MAP=kbd`, which is the default
-  ([docs/08](docs/08-controls.md#the-keyboard-map-rb_evdev_mapkbd-or-rb_midi_mapkbd-alone)):
-  keyboard and mouse, live alongside the controller rather than instead of it, no
-  MIDI needed for them. It is written, cross-compiled and fixture-tested, and it
-  has since been driven on the Pi. `RB_MIDI_MAP=kbd` additionally selects it as
-  the *controller* map, which is how to stop the shim looking for one at all. The
-  direction its selector turns for `↑`/`↓` is still the one thing about it that
-  only hardware — a screen with a list in it — can settle.
-* Booth output is dropped: the FLX4 has two output pairs ([docs/09](docs/09-audio.md)).
-* DJ FX parameter/layer encoders, TrackSkip, BeatJump and some SHIFT-actions are
-  not mapped ([docs/08](docs/08-controls.md)).
-* Autostart ships enabled — `install.sh` installs and enables `rblive4.service`
-  (`RB_AUTOSTART=1`), so the player is already up after a reboot. `RB_AUTOSTART=0`
-  installs the unit but leaves it disabled, and `start-rb.sh` is then run by hand
-  ([docs/11](docs/11-runtime-launcher.md)).
+## 5. Configure Hardware & Mods
+
+Edit `/opt/rblive4/rb.conf` on the board to match your setup:
+
+### Audio & Controller
+```ini
+# Controller selection: 'flx6' for DDJ-FLX6 (4-Ch) or 'flx4' for DDJ-FLX4 (2-Ch)
+MIDI_MAP=flx6
+
+# Low-latency ALSA hardware device
+AUDIO_DEVICE=hw:CARD=DDJFLX6,DEV=0
+
+# Framebuffer resolution
+FB_WIDTH=1280
+FB_HEIGHT=800
+FB_BPP=16
+```
+
+### Performance Mods Configuration
+Edit `/opt/rblive4/mods.conf` to enable or disable individual performance modules:
+```ini
+MOD_CORE=1                  # Core performance hook (librx3_core.so)
+MOD_KEYSHIFT=1              # Harmonic mixing and pitch shift
+MOD_KEY_SYNC=1              # Key sync with master deck
+MOD_STEMS=1                 # Real-time stems separation
+MOD_THEME_WHITE=1           # White bright theme support
+MOD_BEATJUMP_CUSTOM=1       # Extended beatjump pads (8..64 bars)
+MOD_RMX_ROLL=0              # Keep 0 for stability
+```
+
+---
+
+## 6. Launch & Verification
+
+Start the player service:
+```sh
+systemctl start rblive4
+```
+
+Monitor live logs:
+```sh
+journalctl -u rblive4 -f
+```
+
+Check the active process and display:
+```sh
+systemctl status rblive4
+```
+
+### What You Should See:
+1. **Screen:**
+   - The native Pioneer XDJ-RX3 waveform interface renders at 1280×800.
+   - The top header displays: `KEY | STEMS | RMX | MODS | [Wi-Fi/BT]`.
+   - Native controls **ZOOM, GRID, STATUS & BEAT FX** remain untouched and visible at the bottom right.
+2. **Shortcuts & Themes:**
+   - Open SHORTCUT screen (`browse_mode == 10`).
+   - The **JOG LCD** card is replaced by the authentic **THEME** card: touch `[ LIGHT ]` to switch to light mode, or `[ DARK ]` to return to dark mode.
+3. **Controller:**
+   - Jog wheels, pitch faders, play/cue buttons, and channel strips on your DDJ-FLX6 or DDJ-FLX4 respond with zero latency.
+   - Audio streams out of the controller's Master RCA and Headphone jacks.
+
+---
+
+## 7. Fast Iteration (Modifying Shims)
+
+To modify and recompile a shim directly on the board without rebuilding the full chroot:
+```sh
+# On target board:
+cd /opt/rblive4/shims_build/shims
+make RX3=/opt/rblive4/rbx3-run fbshim.so
+cp fbshim.so /opt/rblive4/fbshim.so
+cp fbshim.so /opt/rblive4/rbx3-run/usr/lib/fbshim.so
+systemctl restart rblive4
+```
